@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>客户信息表</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 10px; background-color: #f9f9f9; }
+        
+        .header-container { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 5px; }
+        h1 { font-size: 20px; color: #333; margin: 5px 0; }
+
+        .status-bar {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 12px; padding: 4px 10px; border-radius: 12px;
+            background: #e3f2fd; color: #1565c0; margin-left: 10px;
+        }
+        .status-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #1565c0; animation: pulse 1.5s infinite; }
+        .status-bar.ready { background: #e8f5e9; color: #2e7d32; }
+        .status-bar.ready .dot { background: #2e7d32; animation: none; }
+        .status-bar.error { background: #ffebee; color: #c62828; }
+        .status-bar.error .dot { background: #c62828; animation: none; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        .user-info { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 13px; color: #555; }
+        .user-info .username { font-weight: bold; color: #333; }
+        .btn-logout { background: #f44336; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+        .btn-logout:active { opacity: 0.8; }
+
+        .filter-bar {
+            display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;
+            padding: 10px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px;
+        }
+        .filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .filter-group-label { font-size: 12px; color: #888; font-weight: bold; margin-right: 5px; }
+        .filter-btn {
+            background: transparent; border: 1px solid #ddd; color: #666;
+            padding: 6px 12px; border-radius: 15px; font-size: 12px; cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .filter-btn:active { transform: scale(0.95); }
+        
+        .filter-btn.active { background: #4CAF50; color: white; border-color: #4CAF50; font-weight: bold; }
+        .filter-btn.active-blue { background: #1E90FF; color: white; border-color: #1E90FF; font-weight: bold; }
+        .filter-btn.active-red { background: #FF0000; color: white; border-color: #FF0000; font-weight: bold; }
+        .filter-btn.active-green { background: #2E8B57; color: white; border-color: #2E8B57; font-weight: bold; }
+        
+        .filter-btn.source-btn.active-source { background: #007bff; color: white; border-color: #007bff; font-weight: bold; }
+
+        .action-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; padding: 0 5px; }
+        .action-btn {
+            border: none; padding: 10px 15px; border-radius: 4px; font-size: 14px; cursor: pointer; color: white;
+            flex: 1 1 auto; min-width: 80px; text-align: center;
+        }
+        .action-btn:active { opacity: 0.8; }
+        .btn-green { background-color: #4CAF50; }
+        .btn-blue { background-color: #2196F3; }
+        .btn-orange { background-color: #FF9800; }
+        .btn-purple { background-color: #8A2BE2; }
+        .btn-red { background-color: #f44336; }
+
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            background: white; padding: 20px; border-radius: 8px;
+            width: 100%; max-width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .modal-content h3 { margin: 0 0 15px 0; color: #333; text-align: center; }
+
+        .modal-form { display: flex; flex-direction: column; gap: 12px; }
+        .modal-form .input-group { display: flex; flex-direction: column; }
+        .modal-form .input-group label { font-size: 12px; color: #666; margin-bottom: 4px; }
+        
+        .modal-form .input-group input, 
+        .modal-form .input-group select { 
+            padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+            width: 100%; box-sizing: border-box; background: #fff;
+        }
+        
+        .country-code-group { display: flex; gap: 10px; }
+        .country-code-group .input-group { flex: 1; }
+        .country-code-group .input-group.code-box { flex: 0 0 80px; }
+        .country-code-group .input-group.code-box input { text-align: center; background: #f0f0f0; color: #555; }
+
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn-cancel { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; cursor: pointer; }
+        .btn-confirm { background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; cursor: pointer; }
+
+        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #d0d0d0; background-color: #fff; }
+        table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; min-width: 700px; }
+        th, td { border: 1px solid #d0d0d0; padding: 6px 8px; text-align: center; word-wrap: break-word; vertical-align: middle; }
+        thead th { background-color: #c5d9a8; font-weight: bold; }
+
+        .col-checkbox { width: 4%; } .col-id { width: 4%; }
+        .col-country { width: 11%; } .col-time { width: 12%; }
+        .col-company { width: 10%; } .col-name { width: 12%; }
+        .col-phone { width: 11%; } .col-source { width: 8%; }
+        .col-order { width: 6%; } .col-remark { width: 22%; }
+
+        .text-blue { color: #1E90FF; font-weight: bold; }
+        .text-red { color: #FF0000; font-weight: bold; }
+        .text-green { color: #2E8B57; font-weight: bold; }
+        .text-black { color: #000000; font-weight: bold; }
+
+        .remark-cell { cursor: pointer; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+        .remark-text { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+        
+        .action-icons { display: flex; gap: 6px; flex-shrink: 0; margin-top: 2px; }
+        .action-icon-btn {
+            background: transparent; border: none; font-size: 13px; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+        }
+        .action-icon-btn:active { background: rgba(0,0,0,0.1); }
+        .action-icon-btn.edit { color: #2196F3; }
+
+        .loading-mask {
+            position: fixed; inset: 0; background: rgba(255,255,255,0.7);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999; font-size: 16px; color: #555;
+        }
+        .loading-mask.hidden { display: none; }
+
+        /* ========== 登录/注册页样式 ========== */
+        .auth-container {
+            display: none; position: fixed; inset: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 10000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
+        }
+        .auth-container.active { display: flex; }
+        .auth-box {
+            background: white; padding: 30px; border-radius: 12px; width: 100%; max-width: 380px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }
+        .auth-box h2 { margin: 0 0 20px 0; text-align: center; color: #333; font-size: 22px; }
+        .auth-box .auth-form { display: flex; flex-direction: column; gap: 14px; }
+        .auth-box .auth-form input {
+            padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box;
+        }
+        .auth-box .auth-btn {
+            padding: 12px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; color: white;
+            background: #4CAF50; font-weight: bold; transition: background 0.2s;
+        }
+        .auth-box .auth-btn:hover { background: #43a047; }
+        .auth-box .auth-btn:disabled { background: #aaa; cursor: not-allowed; }
+        .auth-toggle {
+            text-align: center; margin-top: 16px; font-size: 13px; color: #666;
+        }
+        .auth-toggle a { color: #1E90FF; cursor: pointer; text-decoration: underline; }
+        .auth-error { color: #f44336; font-size: 13px; text-align: center; min-height: 18px; }
+
+        @media (max-width: 768px) {
+            .header-container { flex-direction: column; align-items: flex-start; }
+            .user-info { margin-left: 0; margin-top: 5px; }
+            .action-bar { width: 100%; flex-direction: column; align-items: stretch; }
+            .action-btn { width: 100%; padding: 12px; }
+            .filter-bar { flex-direction: column; gap: 15px; }
+            .filter-group { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+            .filter-btn { padding: 8px 16px; flex: 1; text-align: center; min-width: 60px; }
+            .country-code-group { flex-direction: row; flex-wrap: nowrap; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 登录/注册界面 -->
+    <div id="authContainer" class="auth-container">
+        <div class="auth-box">
+            <h2 id="authTitle">登录</h2>
+            <div class="auth-error" id="authError"></div>
+            <div class="auth-form">
+                <input type="email" id="authEmail" placeholder="邮箱" autocomplete="email">
+                <input type="password" id="authPassword" placeholder="密码（至少6位）" autocomplete="current-password">
+                <input type="text" id="authDisplayName" placeholder="显示名称（可选，仅注册时）" style="display:none;">
+                <button class="auth-btn" id="authSubmitBtn" onclick="handleAuth()">登录</button>
+            </div>
+            <div class="auth-toggle">
+                <span id="authToggleText">还没有账号？</span>
+                <a id="authToggleLink" onclick="toggleAuthMode()">立即注册</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="loadingMask" class="loading-mask hidden">
+        <div style="text-align:center;">
+            <div style="font-size:32px;margin-bottom:10px;">⏳</div>
+            <div>正在从云端加载数据...</div>
+        </div>
+    </div>
+
+    <div class="header-container">
+        <div style="display:flex;align-items:center;">
+            <h1>客户信息表</h1>
+            <span id="statusBar" class="status-bar"><span class="dot"></span><span class="status-text">连接中...</span></span>
+        </div>
+        <div class="user-info">
+            <span>欢迎，</span>
+            <span class="username" id="displayUsername">--</span>
+            <button class="btn-logout" onclick="handleLogout()">退出登录</button>
+        </div>
+    </div>
+
+    <div class="filter-bar">
+        <div class="filter-group">
+            <span class="filter-group-label">状态筛选：</span>
+            <button class="filter-btn active" data-filter-type="status" data-filter-value="all">全部</button>
+            <button class="filter-btn active-blue" data-filter-type="status" data-filter-value="潜在客户">☆潜在客户</button>
+            <button class="filter-btn active-red" data-filter-type="status" data-filter-value="重点跟进">☆重点跟进</button>
+            <button class="filter-btn active-green" data-filter-type="status" data-filter-value="下单完成">☆下单完成</button>
+        </div>
+        <div class="filter-group">
+            <span class="filter-group-label">来源筛选：</span>
+            <button class="filter-btn source-btn active-source" data-filter-type="source" data-filter-value="all">全部</button>
+            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="ins">ins</button>
+            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="facebook">facebook</button>
+            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="whatsapp">whatsapp</button>
+            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="展会">展会</button>
+            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="主动找我">主动找我</button>
+        </div>
+    </div>
+
+    <div id="addModal" class="modal-overlay" onclick="closeModalOutside(event)">
+        <div class="modal-content">
+            <h3 id="modalTitle">添加客户信息</h3>
+            <div class="modal-form">
+                <div class="country-code-group">
+                    <div class="input-group">
+                        <label>国家 *</label>
+                        <input type="text" list="countryList" id="m_country" placeholder="输入或选择" oninput="updateCountryCode()" onchange="updateCountryCode()">
+                        <datalist id="countryList"></datalist>
+                    </div>
+                    <div class="input-group code-box">
+                        <label>区号</label>
+                        <input type="text" id="m_countryCode" value="" readonly>
+                    </div>
+                </div>
+                <div class="input-group"><label>跟进时间 *</label><input type="date" id="m_time"></div>
+                <div class="input-group"><label>公司</label><input type="text" id="m_company"></div>
+                <div class="input-group"><label>客户名</label><input type="text" id="m_clientName"></div>
+                <div class="input-group"><label>联系方式</label><input type="text" id="m_phone" placeholder="例如: 13800138000"></div>
+                <div class="input-group">
+                    <label>来源</label>
+                    <select id="m_source">
+                        <option value="">请选择</option>
+                        <option value="ins">ins</option>
+                        <option value="facebook">facebook</option>
+                        <option value="whatsapp">whatsapp</option>
+                        <option value="展会">展会</option>
+                        <option value="主动找我">主动找我</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>当前状态</label>
+                    <select id="m_status">
+                        <option value="潜在客户">☆潜在客户</option>
+                        <option value="重点跟进" selected>☆重点跟进</option>
+                        <option value="下单完成">☆下单完成</option>
+                    </select>
+                </div>
+                <div class="input-group"><label>备注</label><input type="text" id="m_remarks"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+                <button class="btn-confirm" id="submitBtn" onclick="submitAddData()">确认保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-checkbox"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+                    <th class="col-id">序号</th>
+                    <th class="col-country">国家<br><span style="font-size:10px;color:#555;">(区号)</span></th>
+                    <th class="col-time">跟进时间</th>
+                    <th class="col-company">公司</th>
+                    <th class="col-name">客户名</th>
+                    <th class="col-phone">联系方式</th>
+                    <th class="col-source">来源</th>
+                    <th class="col-order">下单</th>
+                    <th class="col-remark">备注</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+            </tbody>
+        </table>
+    </div>
+
+    <div class="action-bar">
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
+            <button class="action-btn btn-red" onclick="batchDelete()">🗑️ 批量删除</button>
+            <button class="action-btn btn-blue" onclick="exportExcel()">📊 导出Excel</button>
+            <button class="action-btn btn-purple" onclick="exportData()">📥 备份数据</button>
+            <label for="importFileInput" class="action-btn btn-orange" style="cursor: pointer;">📤 恢复数据</label>
+            <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importData(event)">
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%; margin-top: 5px;">
+            <button class="action-btn btn-green" onclick="openModal()" style="flex: 1;">➕ 添加数据</button>
+        </div>
+    </div>
+
+    <script>
+        // ========== Supabase 配置 ==========
+        const SUPABASE_URL = 'https://nskqjukbkeznpserxilm.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5za3FqdWtia2V6bnBzZXJ4aWxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTU1MjYsImV4cCI6MjEwMjU3MTUyNn0.1f_1gPJPtu1V-XXBpis3afmn7TxevYKbGbBT2htRCpE';
+        const TABLE_NAME = 'client_info';
+
+        // Supabase 建表 SQL（在 Supabase SQL Editor 中执行）:
+        //
+        // -- 1. 创建客户信息表（增加 user_id 关联）
+        // create table client_info (
+        //   id uuid default gen_random_uuid() primary key,
+        //   user_id uuid not null references auth.users(id),
+        //   country text,
+        //   country_code text,
+        //   follow_time text,
+        //   company text,
+        //   client_name text,
+        //   phone text,
+        //   source text,
+        //   status text,
+        //   ord text,
+        //   remarks text,
+        //   created_at timestamptz default now()
+        // );
+        //
+        // -- 2. 启用 RLS（行级安全），每个用户只能访问自己的数据
+        // alter table client_info enable row level security;
+        //
+        // create policy "用户只能查看自己的数据" on client_info
+        //   for select using (auth.uid() = user_id);
+        //
+        // create policy "用户只能插入自己的数据" on client_info
+        //   for insert with check (auth.uid() = user_id);
+        //
+        // create policy "用户只能更新自己的数据" on client_info
+        //   for update using (auth.uid() = user_id);
+        //
+        // create policy "用户只能删除自己的数据" on client_info
+        //   for delete using (auth.uid() = user_id);
+        //
+        // -- 3. 创建索引加速查询
+        // create index idx_client_info_user_id on client_info(user_id);
+
+        // 初始化 Supabase 客户端
+        let supabase = null;
+        let currentUser = null;
+
+        try {
+            if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && window.supabase) {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+        } catch (e) {
+            console.error('Supabase 初始化失败:', e);
+        }
+
+        // ========== 国家与区号映射库 ==========
+        const countryData = {
+            "中国": "+86", "中国台湾": "+886", "中国香港": "+852", "中国澳门": "+853",
+            "美国": "+1", "加拿大": "+1", "英国": "+44", "法国": "+33", "德国": "+49", 
+            "意大利": "+39", "西班牙": "+34", "葡萄牙": "+351", "荷兰": "+31", "比利时": "+32",
+            "瑞士": "+41", "瑞典": "+46", "挪威": "+47", "丹麦": "+45", "芬兰": "+358",
+            "俄罗斯": "+7", "乌克兰": "+380", "波兰": "+48", "捷克": "+420", "匈牙利": "+36",
+            "澳大利亚": "+61", "新西兰": "+64", "日本": "+81", "韩国": "+82", "新加坡": "+65",
+            "马来西亚": "+60", "泰国": "+66", "越南": "+84", "菲律宾": "+63", "印度": "+91",
+            "印尼": "+62", "巴基斯坦": "+92", "沙特阿拉伯": "+966", "阿联酋": "+971",
+            "南非": "+27", "埃及": "+20", "尼日利亚": "+234", "肯尼亚": "+254",
+            "巴西": "+55", "墨西哥": "+52", "阿根廷": "+54", "智利": "+56", "哥伦比亚": "+57",
+            "厄瓜多尔": "+593", "秘鲁": "+51", "阿尔及利亚": "+213", "摩洛哥": "+212"
+        };
+
+        const countryDatalist = document.getElementById('countryList');
+        for (let country in countryData) {
+            let option = document.createElement('option');
+            option.value = country;
+            countryDatalist.appendChild(option);
+        }
+
+        function updateCountryCode() {
+            const countryInput = document.getElementById('m_country').value;
+            const codeInput = document.getElementById('m_countryCode');
+            codeInput.value = countryData[countryInput] || '';
+        }
+
+        // ========== 认证相关 ==========
+        let isLoginMode = true;
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('authTitle').textContent = isLoginMode ? '登录' : '注册';
+            document.getElementById('authSubmitBtn').textContent = isLoginMode ? '登录' : '注册';
+            document.getElementById('authToggleText').textContent = isLoginMode ? '还没有账号？' : '已有账号？';
+            document.getElementById('authToggleLink').textContent = isLoginMode ? '立即注册' : '去登录';
+            document.getElementById('authDisplayName').style.display = isLoginMode ? 'none' : 'block';
+            document.getElementById('authPassword').setAttribute('autocomplete', isLoginMode ? 'current-password' : 'new-password');
+            document.getElementById('authError').textContent = '';
+        }
+
+        async function handleAuth() {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const displayName = document.getElementById('authDisplayName').value.trim();
+            const btn = document.getElementById('authSubmitBtn');
+            const errorEl = document.getElementById('authError');
+
+            if (!email || !password) {
+                errorEl.textContent = '请填写邮箱和密码';
+                return;
+            }
+            if (password.length < 6) {
+                errorEl.textContent = '密码至少6位';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = isLoginMode ? '登录中...' : '注册中...';
+            errorEl.textContent = '';
+
+            try {
+                if (isLoginMode) {
+                    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                    if (error) throw error;
+                } else {
+                    const { data, error } = await supabase.auth.signUp({
+                        email,
+                        password,
+                        options: {
+                            data: { display_name: displayName || email.split('@')[0] },
+                            emailRedirectTo: window.location.href
+                        }
+                    });
+                    if (error) throw error;
+                    if (data.user && data.user.identities && data.user.identities.length === 0) {
+                        errorEl.textContent = '该邮箱已注册，请直接登录';
+                        btn.disabled = false;
+                        btn.textContent = '注册';
+                        return;
+                    }
+                    if (data.user && !data.session) {
+                        errorEl.textContent = '注册成功！请检查邮箱完成验证后再登录';
+                        btn.disabled = false;
+                        btn.textContent = '注册';
+                        return;
+                    }
+                }
+            } catch (err) {
+                errorEl.textContent = err.message || '操作失败，请重试';
+                btn.disabled = false;
+                btn.textContent = isLoginMode ? '登录' : '注册';
+            }
+        }
+
+        async function handleLogout() {
+            if (!confirm('确定要退出登录吗？')) return;
+            await supabase.auth.signOut();
+            showAuthPage();
+        }
+
+        function showAuthPage() {
+            document.getElementById('authContainer').classList.add('active');
+            document.getElementById('authEmail').value = '';
+            document.getElementById('authPassword').value = '';
+            document.getElementById('authDisplayName').value = '';
+            document.getElementById('authError').textContent = '';
+            isLoginMode = true;
+            toggleAuthMode();
+        }
+
+        function hideAuthPage() {
+            document.getElementById('authContainer').classList.remove('active');
+        }
+
+        async function checkAuth() {
+            if (!supabase) return false;
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                currentUser = session.user;
+                const displayName = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || '用户';
+                document.getElementById('displayUsername').textContent = displayName;
+                hideAuthPage();
+                return true;
+            }
+            return false;
+        }
+
+        // 监听登录状态变化
+        if (supabase) {
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (event === 'SIGNED_IN' && session) {
+                    currentUser = session.user;
+                    const displayName = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || '用户';
+                    document.getElementById('displayUsername').textContent = displayName;
+                    hideAuthPage();
+                    loadFromSupabase();
+                } else if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                    clientData = [];
+                    renderTable([]);
+                    showAuthPage();
+                }
+            });
+        }
+
+        // ========== 数据管理 ==========
+        let clientData = [];
+
+        async function loadFromSupabase() {
+            if (!supabase || !currentUser) return false;
+            try {
+                const { data, error } = await supabase
+                    .from(TABLE_NAME)
+                    .select('*')
+                    .order('created_at', { ascending: true });
+
+                if (error) throw error;
+
+                clientData = (data || []).map(mapFromDB);
+                hideLoading();
+                setStatus('ready', `共 ${clientData.length} 条数据`);
+                applyFilters();
+                return true;
+            } catch (err) {
+                console.error('加载数据失败:', err);
+                hideLoading();
+                setStatus('error', '加载失败: ' + err.message);
+                alert('加载数据失败: ' + err.message);
+                return false;
+            }
+        }
+
+        async function insertToSupabase(record) {
+            try {
+                const { data, error } = await supabase
+                    .from(TABLE_NAME)
+                    .insert([record])
+                    .select();
+                if (error) throw error;
+                return data ? data[0] : null;
+            } catch (err) {
+                console.error('插入失败:', err);
+                alert('保存失败: ' + err.message);
+                return null;
+            }
+        }
+
+        async function updateToSupabase(id, record) {
+            try {
+                const { error } = await supabase
+                    .from(TABLE_NAME)
+                    .update(record)
+                    .eq('id', id);
+                if (error) throw error;
+                return true;
+            } catch (err) {
+                console.error('更新失败:', err);
+                alert('更新失败: ' + err.message);
+                return false;
+            }
+        }
+
+        async function deleteFromSupabase(ids) {
+            try {
+                const { error } = await supabase
+                    .from(TABLE_NAME)
+                    .delete()
+                    .in('id', ids);
+                if (error) throw error;
+                return true;
+            } catch (err) {
+                console.error('删除失败:', err);
+                alert('删除失败: ' + err.message);
+                return false;
+            }
+        }
+
+        async function bulkInsertToSupabase(records) {
+            try {
+                const { error } = await supabase.from(TABLE_NAME).insert(records);
+                if (error) throw error;
+                return true;
+            } catch (err) {
+                console.error('批量插入失败:', err);
+                alert('批量导入失败: ' + err.message);
+                return false;
+            }
+        }
+
+        // ========== 数据模型映射 ==========
+        function mapFromDB(row) {
+            const status = row.status || '潜在客户';
+            let countryClass = 'text-black';
+            if (status === '潜在客户') countryClass = 'text-blue';
+            else if (status === '重点跟进') countryClass = 'text-red';
+            else if (status === '下单完成') countryClass = 'text-green';
+
+            return {
+                id: row.id,
+                country: row.country || '',
+                countryCode: row.country_code || '',
+                time: row.follow_time || '',
+                company: row.company || '',
+                clientName: row.client_name || '',
+                phone: row.phone || '',
+                source: row.source || '',
+                status: status,
+                order: row.ord || '',
+                remarks: row.remarks || '',
+                countryClass: countryClass
+            };
+        }
+
+        // ========== UI 辅助 ==========
+        function showLoading() {
+            document.getElementById('loadingMask').classList.remove('hidden');
+        }
+        function hideLoading() {
+            document.getElementById('loadingMask').classList.add('hidden');
+        }
+        function setStatus(type, text) {
+            const bar = document.getElementById('statusBar');
+            const txt = bar.querySelector('.status-text');
+            bar.classList.remove('ready', 'error');
+            if (type) bar.classList.add(type);
+            txt.textContent = text;
+        }
+
+        // ========== 弹窗与逻辑 ==========
+        let editingId = null;
+
+        function openModal(id = null) {
+            editingId = id;
+            const modalTitle = document.getElementById('modalTitle');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            if (id !== null) {
+                modalTitle.innerText = '修改客户信息';
+                submitBtn.innerText = '保存修改';
+                const item = clientData.find(d => d.id === id);
+                if (item) {
+                    document.getElementById('m_country').value = item.country;
+                    document.getElementById('m_countryCode').value = item.countryCode || '';
+                    let dateStr = item.time;
+                    if (dateStr) {
+                        const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+                        if (match) {
+                            const y = match[1], m = match[2].padStart(2, '0'), d = match[3].padStart(2, '0');
+                            dateStr = `${y}-${m}-${d}`;
+                        }
+                    }
+                    document.getElementById('m_time').value = dateStr;
+                    document.getElementById('m_company').value = item.company;
+                    document.getElementById('m_clientName').value = item.clientName;
+                    document.getElementById('m_phone').value = item.phone || '';
+                    document.getElementById('m_source').value = item.source;
+                    document.getElementById('m_status').value = item.status;
+                    document.getElementById('m_remarks').value = item.remarks;
+                }
+            } else {
+                modalTitle.innerText = '添加客户信息';
+                submitBtn.innerText = '确认添加';
+                document.getElementById('m_time').value = new Date().toISOString().split('T')[0];
+                document.getElementById('m_country').value = '';
+                document.getElementById('m_countryCode').value = '';
+                document.getElementById('m_company').value = '';
+                document.getElementById('m_clientName').value = '';
+                document.getElementById('m_phone').value = '';
+                document.getElementById('m_source').value = '';
+                document.getElementById('m_status').value = '重点跟进';
+                document.getElementById('m_remarks').value = '';
+            }
+            document.getElementById('addModal').classList.add('active');
+        }
+        
+        function closeModal() { document.getElementById('addModal').classList.remove('active'); }
+        function closeModalOutside(e) { if (e.target === document.getElementById('addModal')) closeModal(); }
+
+        function showRemarkInfo(text) {
+            if (text && text.trim() !== '') alert("📝 备注详情：\n\n" + text);
+            else alert("暂无备注信息");
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                const parts = dateStr.split('-');
+                return `${parts[0]}年${parseInt(parts[1])}月${parseInt(parts[2])}日`;
+            }
+            return dateStr;
+        }
+
+        async function submitAddData() {
+            const country = document.getElementById('m_country').value.trim();
+            const countryCode = document.getElementById('m_countryCode').value.trim();
+            const time = document.getElementById('m_time').value.trim();
+            const company = document.getElementById('m_company').value.trim();
+            const clientName = document.getElementById('m_clientName').value.trim();
+            const phone = document.getElementById('m_phone').value.trim(); 
+            const source = document.getElementById('m_source').value.trim();
+            const status = document.getElementById('m_status').value.trim();
+            const remarks = document.getElementById('m_remarks').value.trim();
+
+            if (!country || !time) { alert("请至少填写【国家】和【时间】！"); return; }
+
+            let countryClass = 'text-black';
+            if (status === '潜在客户') countryClass = 'text-blue';
+            else if (status === '重点跟进') countryClass = 'text-red';
+            else if (status === '下单完成') countryClass = 'text-green';
+
+            showLoading();
+
+            if (editingId !== null) {
+                const record = {
+                    country, country_code: countryCode,
+                    follow_time: formatDate(time),
+                    company, client_name: clientName, phone, source, status, remarks
+                };
+                const ok = await updateToSupabase(editingId, record);
+                if (ok) {
+                    const item = clientData.find(d => d.id === editingId);
+                    if (item) {
+                        Object.assign(item, {
+                            country, countryCode,
+                            time: formatDate(time),
+                            company, clientName, phone, source, status, remarks,
+                            countryClass
+                        });
+                    }
+                }
+            } else {
+                const record = {
+                    user_id: currentUser.id,
+                    country, country_code: countryCode,
+                    follow_time: formatDate(time),
+                    company, client_name: clientName, phone, source, status,
+                    ord: '', remarks
+                };
+                const inserted = await insertToSupabase(record);
+                if (inserted) {
+                    clientData.push(mapFromDB(inserted));
+                }
+            }
+
+            hideLoading();
+            document.getElementById('selectAll').checked = false;
+            applyFilters();
+            closeModal();
+        }
+
+        // ========== 多选与批量删除 ==========
+        function toggleSelectAll(selectAllCheckbox) {
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+        }
+
+        function getSelectedIds() {
+            const ids = [];
+            document.querySelectorAll('.row-checkbox:checked').forEach(cb => {
+                ids.push(parseInt(cb.getAttribute('data-id')));
+            });
+            return ids;
+        }
+
+        async function batchDelete() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) {
+                alert("请先在表格中勾选需要删除的客户行！");
+                return;
+            }
+            if(confirm(`确定要删除选中的 ${ids.length} 条客户数据吗？此操作不可撤销！`)) {
+                showLoading();
+                const ok = await deleteFromSupabase(ids);
+                if (ok) {
+                    clientData = clientData.filter(item => !ids.includes(item.id));
+                    document.getElementById('selectAll').checked = false;
+                    applyFilters();
+                }
+                hideLoading();
+            }
+        }
+
+        // ========== 筛选与渲染 ==========
+        let currentFilters = { status: 'all', source: 'all' };
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const type = this.getAttribute('data-filter-type');
+                const value = this.getAttribute('data-filter-value');
+                currentFilters[type] = value;
+
+                const siblings = this.parentElement.querySelectorAll('.filter-btn');
+                siblings.forEach(sib => sib.classList.remove('active', 'active-blue', 'active-red', 'active-green', 'active-source'));
+                
+                if (type === 'status') {
+                    if (value === 'all') this.classList.add('active');
+                    else if (value === '潜在客户') this.classList.add('active-blue');
+                    else if (value === '重点跟进') this.classList.add('active-red');
+                    else if (value === '下单完成') this.classList.add('active-green');
+                } else if (type === 'source') {
+                    this.classList.add('active-source');
+                }
+                applyFilters();
+            });
+        });
+
+        function applyFilters() {
+            let filteredData = clientData;
+            if (currentFilters.status !== 'all') 
+                filteredData = filteredData.filter(item => item.status === currentFilters.status);
+            if (currentFilters.source !== 'all') 
+                filteredData = filteredData.filter(item => item.source === currentFilters.source);
+            renderTable(filteredData);
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            data.sort((a, b) => a.id - b.id);
+
+            data.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                const safeRemarks = (item.remarks || '').replace(/'/g, "\\'");
+
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="row-checkbox" data-id="${item.id}"></td>
+                    <td>${index + 1}</td>
+                    <td class="${item.countryClass || 'text-black'}">
+                        ${item.country}<br><span style="font-size:10px;color:#888;">${item.countryCode || ''}</span>
+                    </td>
+                    <td>${item.time}</td>
+                    <td>${item.company}</td>
+                    <td>${item.clientName}</td>
+                    <td>${item.phone || ''}</td>
+                    <td>${item.source}</td>
+                    <td>${item.order}</td>
+                    <td>
+                        <div class="remark-cell">
+                            <span class="remark-text" onclick="showRemarkInfo('${safeRemarks}')">${item.remarks || ''}</span>
+                            <div class="action-icons">
+                                <button class="action-icon-btn edit" onclick="openModal(${item.id})" title="修改">✏️</button>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ========== 导出与导入 ==========
+        function exportExcel() {
+            if (!clientData || clientData.length === 0) { alert("当前没有数据可以导出！"); return; }
+            
+            const excelRows = [
+                ["序号", "国家", "区号", "跟进时间", "公司", "客户名", "联系方式", "来源", "状态", "下单", "备注"]
+            ];
+
+            clientData.sort((a, b) => a.id - b.id).forEach((item, index) => {
+                excelRows.push([
+                    index + 1, item.country, item.countryCode || '', item.time,
+                    item.company, item.clientName, item.phone || '', 
+                    item.source, item.status, item.order, item.remarks
+                ]);
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(excelRows);
+            
+            ws['!cols'] = [
+                { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, 
+                { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 10 },
+                { wch: 10 }, { wch: 10 }, { wch: 30 }
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, "客户数据");
+            const fileName = `客户信息表_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        function exportData() {
+            if (!clientData || clientData.length === 0) { alert("当前没有数据可以导出！"); return; }
+            
+            const exportPayload = clientData.map(item => ({
+                country: item.country,
+                countryCode: item.countryCode,
+                time: item.time,
+                company: item.company,
+                clientName: item.clientName,
+                phone: item.phone,
+                source: item.source,
+                status: item.status,
+                order: item.order,
+                remarks: item.remarks
+            }));
+
+            const dataString = JSON.stringify(exportPayload, null, 2);
+            const blob = new Blob([dataString], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const fileName = `客户数据备份_${new Date().toISOString().split('T')[0]}.json`;
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            
+            a.dispatchEvent(new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window
+            }));
+            
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 1500);
+        }
+
+        async function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (Array.isArray(importedData) && importedData.length > 0) {
+                        if(confirm(`找到 ${importedData.length} 条客户数据，确认要导入到云端吗？`)) {
+                            showLoading();
+                            const records = importedData.map(item => ({
+                                user_id: currentUser.id,
+                                country: item.country || '',
+                                country_code: item.countryCode || '',
+                                follow_time: item.time || '',
+                                company: item.company || '',
+                                client_name: item.clientName || '',
+                                phone: item.phone || '',
+                                source: item.source || '',
+                                status: item.status || '潜在客户',
+                                ord: item.order || '',
+                                remarks: item.remarks || ''
+                            }));
+                            const ok = await bulkInsertToSupabase(records);
+                            if (ok) {
+                                alert('导入成功！');
+                                await loadFromSupabase();
+                            }
+                        }
+                    } else {
+                        alert('文件格式错误，请选择正确的 JSON 备份文件。');
+                    }
+                } catch (err) {
+                    alert('解析文件失败，请确认文件未被损坏。');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // ========== 启动 ==========
+        window.addEventListener('DOMContentLoaded', async function() {
+            if (!supabase) {
+                alert('请先在 table.html 中配置 SUPABASE_URL 和 SUPABASE_ANON_KEY');
+                return;
+            }
+            const loggedIn = await checkAuth();
+            if (!loggedIn) {
+                showAuthPage();
+            } else {
+                await loadFromSupabase();
+            }
+        });
+    </script>
+</body>
+</html>
