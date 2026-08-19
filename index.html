@@ -4,937 +4,1026 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>客户信息表</title>
+    <!-- Element Plus CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <!-- Element Plus JS -->
+    <script src="https://unpkg.com/element-plus"></script>
+    <!-- Element Plus Icons -->
+    <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+    <!-- XLSX -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 10px; background-color: #f9f9f9; }
-        
-        .header-container { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 5px; }
-        h1 { font-size: 20px; color: #333; margin: 5px 0; }
-
-        .status-bar {
-            display: inline-flex; align-items: center; gap: 6px;
-            font-size: 12px; padding: 4px 10px; border-radius: 12px;
-            background: #e3f2fd; color: #1565c0; margin-left: 10px;
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 16px;
+            background-color: #f5f7fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-size: 14px;
+            color: #303133;
         }
-        .status-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #1565c0; animation: pulse 1.5s infinite; }
-        .status-bar.ready { background: #e8f5e9; color: #2e7d32; }
-        .status-bar.ready .dot { background: #2e7d32; animation: none; }
-        .status-bar.error { background: #ffebee; color: #c62828; }
-        .status-bar.error .dot { background: #c62828; animation: none; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        #app { max-width: 1400px; margin: 0 auto; }
 
-        .user-info { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 13px; color: #555; }
-        .user-info .username { font-weight: bold; color: #333; }
-        .btn-logout { background: #f44336; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
-        .btn-logout:active { opacity: 0.8; }
+        /* ========== 页头 ========== */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 22px;
+            font-weight: 600;
+            color: #303133;
+            margin: 0;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #606266;
+        }
+        .user-info .username { font-weight: 600; color: #303133; }
 
-        .filter-bar {
-            display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;
-            padding: 10px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px;
+        /* ========== 筛选卡片 ========== */
+        .filter-card { margin-bottom: 16px; }
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            align-items: center;
         }
-        .filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-        .filter-group-label { font-size: 12px; color: #888; font-weight: bold; margin-right: 5px; }
-        .filter-btn {
-            background: transparent; border: 1px solid #ddd; color: #666;
-            padding: 6px 12px; border-radius: 15px; font-size: 12px; cursor: pointer;
-            transition: all 0.2s ease;
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
-        .filter-btn:active { transform: scale(0.95); }
-        
-        .filter-btn.active { background: #4CAF50; color: white; border-color: #4CAF50; font-weight: bold; }
-        .filter-btn.active-blue { background: #1E90FF; color: white; border-color: #1E90FF; font-weight: bold; }
-        .filter-btn.active-red { background: #FF0000; color: white; border-color: #FF0000; font-weight: bold; }
-        .filter-btn.active-green { background: #2E8B57; color: white; border-color: #2E8B57; font-weight: bold; }
-        
-        .filter-btn.source-btn.active-source { background: #007bff; color: white; border-color: #007bff; font-weight: bold; }
+        .filter-label {
+            font-size: 13px;
+            color: #909399;
+            font-weight: 600;
+        }
 
-        .action-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; padding: 0 5px; }
-        .action-btn {
-            border: none; padding: 10px 15px; border-radius: 4px; font-size: 14px; cursor: pointer; color: white;
-            flex: 1 1 auto; min-width: 80px; text-align: center;
+        /* ========== 表格卡片 ========== */
+        .table-card { margin-bottom: 16px; }
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
         }
-        .action-btn:active { opacity: 0.8; }
-        .btn-green { background-color: #4CAF50; }
-        .btn-blue { background-color: #2196F3; }
-        .btn-orange { background-color: #FF9800; }
-        .btn-purple { background-color: #8A2BE2; }
-        .btn-red { background-color: #f44336; }
 
-        .modal-overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); z-index: 1000;
-            justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
+        /* 表头/单元格强制不竖排 */
+        .cust-table .el-table__header-wrapper th,
+        .cust-table .el-table__body-wrapper td {
+            text-align: center !important;
         }
-        .modal-overlay.active { display: flex; }
-        .modal-content {
-            background: white; padding: 20px; border-radius: 8px;
-            width: 100%; max-width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        .cust-table .el-table__header-wrapper th .cell,
+        .cust-table .el-table__body-wrapper td .cell {
+            text-align: center;
+            white-space: nowrap;
+            word-break: normal;
+            line-height: 1.5;
+            padding-left: 6px;
+            padding-right: 6px;
+            text-overflow: ellipsis;
+            overflow: hidden;
         }
-        .modal-content h3 { margin: 0 0 15px 0; color: #333; text-align: center; }
+        /* 国家列居中两行 */
+        .cust-table .col-country .cell {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            line-height: 1.4;
+            white-space: normal;
+        }
+        /* 备注列允许换行，左对齐 */
+        .cust-table .col-remarks .cell {
+            white-space: normal;
+            word-break: break-word;
+            text-align: left !important;
+        }
+        .cust-table .el-table__header-wrapper th {
+            background-color: #c5d9a8 !important;
+            color: #303133 !important;
+            font-weight: bold !important;
+        }
 
-        .modal-form { display: flex; flex-direction: column; gap: 12px; }
-        .modal-form .input-group { display: flex; flex-direction: column; }
-        .modal-form .input-group label { font-size: 12px; color: #666; margin-bottom: 4px; }
-        
-        .modal-form .input-group input, 
-        .modal-form .input-group select { 
-            padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
-            width: 100%; box-sizing: border-box; background: #fff;
-        }
-        
-        .country-code-group { display: flex; gap: 10px; }
-        .country-code-group .input-group { flex: 1; }
-        .country-code-group .input-group.code-box { flex: 0 0 80px; }
-        .country-code-group .input-group.code-box input { text-align: center; background: #f0f0f0; color: #555; }
+        /* 国家列状态着色 */
+        .country-potential { color: #1E90FF; font-weight: 600; }
+        .country-focus { color: #FF0000; font-weight: 600; }
+        .country-done { color: #2E8B57; font-weight: 600; }
+        .country-default { color: #000; font-weight: 600; }
+        .country-code-sub { font-size: 11px; color: #555; font-weight: normal; margin-top: 2px; }
 
-        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-        .btn-cancel { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; cursor: pointer; }
-        .btn-confirm { background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; cursor: pointer; }
-
-        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #d0d0d0; background-color: #fff; }
-        table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; min-width: 700px; }
-        th, td { border: 1px solid #d0d0d0; padding: 6px 8px; text-align: center; word-wrap: break-word; vertical-align: middle; }
-        thead th { background-color: #c5d9a8; font-weight: bold; }
-
-        .col-checkbox { width: 4%; } .col-id { width: 4%; }
-        .col-country { width: 11%; } .col-time { width: 12%; }
-        .col-company { width: 10%; } .col-name { width: 12%; }
-        .col-phone { width: 11%; } .col-source { width: 8%; }
-        .col-order { width: 6%; } .col-remark { width: 22%; }
-
-        .text-blue { color: #1E90FF; font-weight: bold; }
-        .text-red { color: #FF0000; font-weight: bold; }
-        .text-green { color: #2E8B57; font-weight: bold; }
-        .text-black { color: #000000; font-weight: bold; }
-
-        .remark-cell { cursor: pointer; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-        .remark-text { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-        
-        .action-icons { display: flex; gap: 6px; flex-shrink: 0; margin-top: 2px; }
-        .action-icon-btn {
-            background: transparent; border: none; font-size: 13px; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+        /* 备注单元格 */
+        .remark-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
         }
-        .action-icon-btn:active { background: rgba(0,0,0,0.1); }
-        .action-icon-btn.edit { color: #2196F3; }
+        .remark-text {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: left;
+            cursor: pointer;
+        }
+        .remark-text:hover { color: #409eff; }
+        .edit-link {
+            text-align: right;
+        }
 
-        .loading-mask {
-            position: fixed; inset: 0; background: rgba(255,255,255,0.7);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 9999; font-size: 16px; color: #555;
+        /* ========== 分页 ========== */
+        .pagination-wrapper {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 12px 16px;
+            border-top: 1px solid #ebeef5;
         }
-        .loading-mask.hidden { display: none; }
 
-        /* ========== 登录/注册页样式 ========== */
-        .auth-container {
-            display: none; position: fixed; inset: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            z-index: 10000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
+        /* ========== 操作栏 ========== */
+        .action-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
         }
-        .auth-container.active { display: flex; }
-        .auth-box {
-            background: white; padding: 30px; border-radius: 12px; width: 100%; max-width: 380px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        .action-bar .left-group,
+        .action-bar .right-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
         }
-        .auth-box h2 { margin: 0 0 20px 0; text-align: center; color: #333; font-size: 22px; }
-        .auth-box .auth-form { display: flex; flex-direction: column; gap: 14px; }
-        .auth-box .auth-form input {
-            padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box;
+        .action-bar .right-group { margin-left: auto; }
+
+        /* ========== 登录对话框 ========== */
+        .auth-dialog .el-dialog__body { padding-top: 10px; }
+        .auth-error {
+            color: #f56c6c;
+            font-size: 13px;
+            text-align: center;
+            min-height: 20px;
+            margin-bottom: 8px;
         }
-        .auth-box .auth-btn {
-            padding: 12px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; color: white;
-            background: #4CAF50; font-weight: bold; transition: background 0.2s;
-        }
-        .auth-box .auth-btn:hover { background: #43a047; }
-        .auth-box .auth-btn:disabled { background: #aaa; cursor: not-allowed; }
         .auth-toggle {
-            text-align: center; margin-top: 16px; font-size: 13px; color: #666;
+            text-align: center;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #606266;
         }
-        .auth-toggle a { color: #1E90FF; cursor: pointer; text-decoration: underline; }
-        .auth-error { color: #f44336; font-size: 13px; text-align: center; min-height: 18px; }
+        .auth-toggle a {
+            color: #409eff;
+            cursor: pointer;
+            text-decoration: none;
+            margin-left: 4px;
+        }
+        .auth-toggle a:hover { text-decoration: underline; }
+
+        /* 筛选 radio-button 状态色 */
+        .el-radio-group .rb-primary.is-active { background-color: #1E90FF !important; border-color: #1E90FF !important; box-shadow: -1px 0 0 0 #1E90FF !important; color: #fff !important; }
+        .el-radio-group .rb-danger.is-active { background-color: #FF0000 !important; border-color: #FF0000 !important; box-shadow: -1px 0 0 0 #FF0000 !important; color: #fff !important; }
+        .el-radio-group .rb-success.is-active { background-color: #2E8B57 !important; border-color: #2E8B57 !important; box-shadow: -1px 0 0 0 #2E8B57 !important; color: #fff !important; }
+        .el-radio-group .rb-all.is-active { background-color: #409eff !important; border-color: #409eff !important; box-shadow: -1px 0 0 0 #409eff !important; color: #fff !important; }
+        /* radio-button 文字颜色默认深色 */
+        .el-radio-button__inner {
+            color: #666;
+            font-size: 12px;
+        }
+
+        /* 隐藏 number 上下箭头 */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
         @media (max-width: 768px) {
-            .header-container { flex-direction: column; align-items: flex-start; }
-            .user-info { margin-left: 0; margin-top: 5px; }
-            .action-bar { width: 100%; flex-direction: column; align-items: stretch; }
-            .action-btn { width: 100%; padding: 12px; }
-            .filter-bar { flex-direction: column; gap: 15px; }
-            .filter-group { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
-            .filter-btn { padding: 8px 16px; flex: 1; text-align: center; min-width: 60px; }
-            .country-code-group { flex-direction: row; flex-wrap: nowrap; }
+            body { padding: 10px; }
+            .page-header { flex-direction: column; align-items: flex-start; }
+            .action-bar { flex-direction: column; align-items: stretch; }
+            .action-bar .left-group,
+            .action-bar .right-group { margin-left: 0; width: 100%; }
+            .action-bar .el-button { width: 100%; }
+            .filter-row { flex-direction: column; align-items: flex-start; gap: 12px; }
         }
     </style>
 </head>
 <body>
+    <div id="app" v-loading.fullscreen.lock="fullscreenLoading" element-loading-text="正在从云端加载数据...">
 
-    <!-- 登录/注册界面 -->
-    <div id="authContainer" class="auth-container">
-        <div class="auth-box">
-            <h2 id="authTitle">登录</h2>
-            <div class="auth-error" id="authError"></div>
-            <div class="auth-form">
-                <input type="email" id="authEmail" placeholder="邮箱" autocomplete="email">
-                <input type="password" id="authPassword" placeholder="密码（至少6位）" autocomplete="current-password">
-                <input type="text" id="authDisplayName" placeholder="显示名称（可选，仅注册时）" style="display:none;">
-                <button class="auth-btn" id="authSubmitBtn" onclick="handleAuth()">登录</button>
-            </div>
+        <!-- ========== 登录 / 注册 ========== -->
+        <el-dialog
+            v-model="authDialogVisible"
+            :title="isLoginMode ? '登录' : '注册'"
+            width="380px"
+            :close-on-click-modal="false"
+            :close-on-press-escape="false"
+            :show-close="false"
+            class="auth-dialog"
+            align-center
+        >
+            <div class="auth-error">{{ authError }}</div>
+            <el-form :model="authForm" label-position="top" size="large">
+                <el-form-item>
+                    <el-input v-model="authForm.email" placeholder="邮箱" type="email" autocomplete="email"></el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-input v-model="authForm.password" placeholder="密码（至少6位）" type="password"
+                              :autocomplete="isLoginMode ? 'current-password' : 'new-password'" show-password></el-input>
+                </el-form-item>
+                <el-form-item v-if="!isLoginMode">
+                    <el-input v-model="authForm.displayName" placeholder="显示名称（可选）"></el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" style="width:100%;" :loading="authLoading" @click="handleAuth">
+                        {{ isLoginMode ? '登录' : '注册' }}
+                    </el-button>
+                </el-form-item>
+            </el-form>
             <div class="auth-toggle">
-                <span id="authToggleText">还没有账号？</span>
-                <a id="authToggleLink" onclick="toggleAuthMode()">立即注册</a>
+                <span>{{ isLoginMode ? '还没有账号？' : '已有账号？' }}</span>
+                <a @click="toggleAuthMode">{{ isLoginMode ? '立即注册' : '去登录' }}</a>
             </div>
-        </div>
-    </div>
+        </el-dialog>
 
-    <!-- 主界面 -->
-    <div id="loadingMask" class="loading-mask hidden">
-        <div style="text-align:center;">
-            <div style="font-size:32px;margin-bottom:10px;">⏳</div>
-            <div>正在从云端加载数据...</div>
-        </div>
-    </div>
+        <!-- ========== 主界面 ========== -->
+        <div v-if="currentUser">
+            <div class="page-header">
+                <h1 class="page-title">
+                    客户信息表
+                    <el-tag :type="statusTagType" effect="light" round size="small">
+                        {{ statusText }}
+                    </el-tag>
+                </h1>
+                <div class="user-info">
+                    <el-avatar :size="32" style="background:#409eff;">{{ (displayUsername||'U').charAt(0).toUpperCase() }}</el-avatar>
+                    <span>欢迎，<span class="username">{{ displayUsername }}</span></span>
+                    <el-button size="small" type="danger" plain @click="handleLogout">退出登录</el-button>
+                </div>
+            </div>
 
-    <div class="header-container">
-        <div style="display:flex;align-items:center;">
-            <h1>客户信息表</h1>
-            <span id="statusBar" class="status-bar"><span class="dot"></span><span class="status-text">连接中...</span></span>
-        </div>
-        <div class="user-info">
-            <span>欢迎，</span>
-            <span class="username" id="displayUsername">--</span>
-            <button class="btn-logout" onclick="handleLogout()">退出登录</button>
-        </div>
-    </div>
-
-    <div class="filter-bar">
-        <div class="filter-group">
-            <span class="filter-group-label">状态筛选：</span>
-            <button class="filter-btn active" data-filter-type="status" data-filter-value="all">全部</button>
-            <button class="filter-btn active-blue" data-filter-type="status" data-filter-value="潜在客户">☆潜在客户</button>
-            <button class="filter-btn active-red" data-filter-type="status" data-filter-value="重点跟进">☆重点跟进</button>
-            <button class="filter-btn active-green" data-filter-type="status" data-filter-value="下单完成">☆下单完成</button>
-        </div>
-        <div class="filter-group">
-            <span class="filter-group-label">来源筛选：</span>
-            <button class="filter-btn source-btn active-source" data-filter-type="source" data-filter-value="all">全部</button>
-            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="ins">ins</button>
-            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="facebook">facebook</button>
-            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="whatsapp">whatsapp</button>
-            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="展会">展会</button>
-            <button class="filter-btn source-btn" data-filter-type="source" data-filter-value="主动找我">主动找我</button>
-        </div>
-    </div>
-
-    <div id="addModal" class="modal-overlay" onclick="closeModalOutside(event)">
-        <div class="modal-content">
-            <h3 id="modalTitle">添加客户信息</h3>
-            <div class="modal-form">
-                <div class="country-code-group">
-                    <div class="input-group">
-                        <label>国家 *</label>
-                        <input type="text" list="countryList" id="m_country" placeholder="输入或选择" oninput="updateCountryCode()" onchange="updateCountryCode()">
-                        <datalist id="countryList"></datalist>
+            <!-- 筛选栏 -->
+            <el-card class="filter-card" shadow="never">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <span class="filter-label">状态筛选：</span>
+                        <el-radio-group v-model="currentFilters.status" size="small">
+                            <el-radio-button value="all" class="rb-all">全部</el-radio-button>
+                            <el-radio-button value="潜在客户" class="rb-primary">☆潜在客户</el-radio-button>
+                            <el-radio-button value="重点跟进" class="rb-danger">☆重点跟进</el-radio-button>
+                            <el-radio-button value="下单完成" class="rb-success">☆下单完成</el-radio-button>
+                        </el-radio-group>
                     </div>
-                    <div class="input-group code-box">
-                        <label>区号</label>
-                        <input type="text" id="m_countryCode" value="" readonly>
+                    <div class="filter-group">
+                        <span class="filter-label">来源筛选：</span>
+                        <el-radio-group v-model="currentFilters.source" size="small">
+                            <el-radio-button value="all" class="rb-all">全部</el-radio-button>
+                            <el-radio-button v-for="s in sourceList" :key="s" :value="s">{{ s }}</el-radio-button>
+                        </el-radio-group>
+                    </div>
+                    <div class="filter-group" style="margin-left:auto;">
+                        <el-button type="primary" @click="refreshData">
+                            <el-icon><Refresh></Refresh></el-icon> 刷新数据
+                        </el-button>
                     </div>
                 </div>
-                <div class="input-group"><label>跟进时间 *</label><input type="date" id="m_time"></div>
-                <div class="input-group"><label>公司</label><input type="text" id="m_company"></div>
-                <div class="input-group"><label>客户名</label><input type="text" id="m_clientName"></div>
-                <div class="input-group"><label>联系方式</label><input type="text" id="m_phone" placeholder="例如: 13800138000"></div>
-                <div class="input-group">
-                    <label>来源</label>
-                    <select id="m_source">
-                        <option value="">请选择</option>
-                        <option value="ins">ins</option>
-                        <option value="facebook">facebook</option>
-                        <option value="whatsapp">whatsapp</option>
-                        <option value="展会">展会</option>
-                        <option value="主动找我">主动找我</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>当前状态</label>
-                    <select id="m_status">
-                        <option value="潜在客户">☆潜在客户</option>
-                        <option value="重点跟进" selected>☆重点跟进</option>
-                        <option value="下单完成">☆下单完成</option>
-                    </select>
-                </div>
-                <div class="input-group"><label>备注</label><input type="text" id="m_remarks"></div>
-            </div>
-            <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeModal()">取消</button>
-                <button class="btn-confirm" id="submitBtn" onclick="submitAddData()">确认保存</button>
-            </div>
-        </div>
-    </div>
+            </el-card>
 
-    <div class="table-responsive">
-        <table>
-            <thead>
-                <tr>
-                    <th class="col-checkbox"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
-                    <th class="col-id">序号</th>
-                    <th class="col-country">国家<br><span style="font-size:10px;color:#555;">(区号)</span></th>
-                    <th class="col-time">跟进时间</th>
-                    <th class="col-company">公司</th>
-                    <th class="col-name">客户名</th>
-                    <th class="col-phone">联系方式</th>
-                    <th class="col-source">来源</th>
-                    <th class="col-order">下单</th>
-                    <th class="col-remark">备注</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody">
-            </tbody>
-        </table>
-    </div>
+            <!-- 添加/编辑 弹窗 -->
+            <el-dialog
+                v-model="modalVisible"
+                :title="editingId === null ? '添加客户信息' : '修改客户信息'"
+                width="520px"
+                :close-on-click-modal="false"
+                align-center
+            >
+                <el-form :model="form" label-width="90px" label-position="right">
+                    <el-form-item label="国家" required>
+                        <div style="display:flex;gap:10px;width:100%;">
+                            <el-select
+                                v-model="form.country"
+                                filterable
+                                allow-create
+                                default-first-option
+                                placeholder="输入或选择国家"
+                                style="flex:1;"
+                                @change="updateCountryCode"
+                            >
+                                <el-option v-for="(code, c) in countryData" :key="c" :label="c" :value="c" ></el-option>
+                            </el-select>
+                            <el-input v-model="form.countryCode" placeholder="区号" readonly style="width:110px;" ></el-input>
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="跟进时间" required>
+                        <el-date-picker v-model="form.time" type="date" placeholder="选择日期"
+                                        value-format="YYYY-MM-DD" style="width:100%;" ></el-date-picker>
+                    </el-form-item>
+                    <el-form-item label="公司">
+                        <el-input v-model="form.company" placeholder="公司名称" ></el-input>
+                    </el-form-item>
+                    <el-form-item label="客户名">
+                        <el-input v-model="form.clientName" placeholder="客户姓名" ></el-input>
+                    </el-form-item>
+                    <el-form-item label="联系方式">
+                        <el-input v-model="form.phone" placeholder="例如: 13800138000" ></el-input>
+                    </el-form-item>
+                    <el-form-item label="来源">
+                        <el-select v-model="form.source" placeholder="请选择来源" style="width:100%;" clearable>
+                            <el-option v-for="s in sourceList" :key="s" :label="s" :value="s" ></el-option>
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="当前状态">
+                        <el-select v-model="form.status" placeholder="请选择状态" style="width:100%;">
+                            <el-option label="☆潜在客户" value="潜在客户" ></el-option>
+                            <el-option label="☆重点跟进" value="重点跟进" ></el-option>
+                            <el-option label="☆下单完成" value="下单完成" ></el-option>
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="备注">
+                        <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="备注信息" ></el-input>
+                    </el-form-item>
+                </el-form>
+                <template #footer>
+                    <el-button @click="modalVisible = false">取消</el-button>
+                    <el-button type="primary" :loading="submitLoading" @click="submitAddData">
+                        {{ editingId === null ? '确认添加' : '保存修改' }}
+                    </el-button>
+                </template>
+            </el-dialog>
 
-    <div class="action-bar">
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
-            <button class="action-btn btn-red" onclick="batchDelete()">🗑️ 批量删除</button>
-            <button class="action-btn btn-blue" onclick="exportExcel()">📊 导出Excel</button>
-            <button class="action-btn btn-purple" onclick="exportData()">📥 备份数据</button>
-            <label for="importFileInput" class="action-btn btn-orange" style="cursor: pointer;">📤 恢复数据</label>
-            <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importData(event)">
-        </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%; margin-top: 5px;">
-            <button class="action-btn btn-green" onclick="openModal()" style="flex: 1;">➕ 添加数据</button>
+            <!-- 表格 -->
+            <el-card class="table-card" shadow="never" body-style="padding:0;">
+                <div class="table-wrapper">
+                    <el-table
+                        ref="tableRef"
+                        class="cust-table"
+                        v-loading="loadingPage"
+                        :data="pageData"
+                        stripe
+                        border
+                        size="default"
+                        style="width: 100%;"
+                        empty-text="暂无客户数据"
+                        @selection-change="handleSelectionChange"
+                    >
+                        <!-- 1. 复选框 -->
+                        <el-table-column type="selection" width="50" align="center"></el-table-column>
+                        <!-- 2. 序号（按当前分页连续编号） -->
+                        <el-table-column type="index" label="序号" width="60" align="center" header-align="center" :index="indexMethod"></el-table-column>
+                        <!-- 3. 国家 (区号) -->
+                        <el-table-column label="国家" prop="country" min-width="110" align="center" class-name="col-country" header-align="center">
+                            <template #default="{ row }">
+                                <div :class="getCountryClass(row.status)">
+                                    {{ row.country }}
+                                    <div class="country-code-sub">({{ row.countryCode || '' }})</div>
+                                </div>
+                            </template>
+                        </el-table-column>
+                        <!-- 4. 跟进时间 -->
+                        <el-table-column label="跟进时间" prop="time" min-width="120" align="center" header-align="center" show-overflow-tooltip></el-table-column>
+                        <!-- 5. 公司 -->
+                        <el-table-column label="公司" prop="company" min-width="140" align="center" header-align="center" show-overflow-tooltip></el-table-column>
+                        <!-- 6. 客户名 -->
+                        <el-table-column label="客户名" prop="clientName" min-width="110" align="center" header-align="center" show-overflow-tooltip></el-table-column>
+                        <!-- 7. 联系方式 -->
+                        <el-table-column label="联系方式" prop="phone" min-width="140" align="center" header-align="center" show-overflow-tooltip></el-table-column>
+                        <!-- 8. 来源 -->
+                        <el-table-column label="来源" prop="source" width="100" align="center" header-align="center">
+                            <template #default="{ row }">
+                                <el-tag v-if="row.source" size="small" effect="plain">{{ row.source }}</el-tag>
+                                <span v-else style="color:#c0c4cc;">-</span>
+                            </template>
+                        </el-table-column>
+                        <!-- 9. 下单 -->
+                        <el-table-column label="下单" prop="order" width="80" align="center" header-align="center">
+                            <template #default="{ row }">
+                                <span v-if="row.order">{{ row.order }}</span>
+                                <span v-else style="color:#c0c4cc;">-</span>
+                            </template>
+                        </el-table-column>
+                        <!-- 10. 备注 -->
+                        <el-table-column label="备注" prop="remarks" min-width="200" align="left" header-align="center" class-name="col-remarks">
+                            <template #default="{ row }">
+                                <div class="remark-cell">
+                                    <span class="remark-text" @click="showRemarkInfo(row.remarks)">
+                                        {{ row.remarks || '' }}
+                                    </span>
+                                    <div class="edit-link">
+                                        <el-button link type="primary" size="small" @click="openModal(row.id)">
+                                            <el-icon><Edit></Edit></el-icon> 修改
+                                        </el-button>
+                                    </div>
+                                </div>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+                <!-- 分页 -->
+                <div class="pagination-wrapper">
+                    <el-pagination
+                        v-model:current-page="pagination.currentPage"
+                        v-model:page-size="pagination.pageSize"
+                        :page-sizes="pageSizes"
+                        :total="pagination.total"
+                        :page-count="Math.max(1, Math.ceil(pagination.total / pagination.pageSize))"
+                        layout="total, sizes, prev, pager, next, jumper"
+                        background
+                        small
+                        @current-change="handleCurrentChange"
+                        @size-change="handleSizeChange"
+                    ></el-pagination>
+                </div>
+            </el-card>
+
+            <!-- 操作栏 -->
+            <div class="action-bar">
+                <div class="left-group">
+                    <el-button type="danger" @click="batchDelete">
+                        <el-icon><Delete></Delete></el-icon> 批量删除
+                    </el-button>
+                    <el-button type="primary" @click="exportExcel">
+                        <el-icon><Download></Download></el-icon> 导出Excel
+                    </el-button>
+                    <el-button type="warning" @click="exportData">
+                        <el-icon><Files></Files></el-icon> 备份数据
+                    </el-button>
+                    <el-upload
+                        :show-file-list="false"
+                        accept=".json"
+                        :before-upload="importData"
+                    >
+                        <el-button type="warning" plain>
+                            <el-icon><Upload></Upload></el-icon> 恢复数据
+                        </el-button>
+                    </el-upload>
+                </div>
+                <div class="right-group">
+                    <el-button type="success" size="large" @click="openModal()">
+                        <el-icon><Plus></Plus></el-icon> 添加数据
+                    </el-button>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // ========== Supabase 配置 ==========
-        const SUPABASE_URL = 'https://nskqjukbkeznpserxilm.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5za3FqdWtia2V6bnBzZXJ4aWxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTU1MjYsImV4cCI6MjEwMjU3MTUyNn0.1f_1gPJPtu1V-XXBpis3afmn7TxevYKbGbBT2htRCpE';
-        const TABLE_NAME = 'client_info';
+        const { createApp, ref, reactive, computed, watch, onMounted, nextTick, onBeforeUnmount } = Vue;
+        const { ElMessage, ElMessageBox } = ElementPlus;
 
-        // 初始化 Supabase 客户端
-        let supabase = null;
-        let currentUser = null;
+        const app = createApp({
+            setup() {
+                // ========== Supabase 配置 ==========
+                const SUPABASE_URL = 'https://nskqjukbkeznpserxilm.supabase.co';
+                const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5za3FqdWtia2V6bnBzZXJ4aWxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTU1MjYsImV4cCI6MjEwMjU3MTUyNn0.1f_1gPJPtu1V-XXBpis3afmn7TxevYKbGbBT2htRCpE';
+                const TABLE_NAME = 'client_info';
 
-        try {
-            if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && window.supabase) {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            }
-        } catch (e) {
-            console.error('Supabase 初始化失败:', e);
-        }
+                let supabase = null;
+                let authListener = null;
 
-        // ========== 国家与区号映射库 ==========
-        const countryData = {
-            "中国": "+86", "中国台湾": "+886", "中国香港": "+852", "中国澳门": "+853",
-            "美国": "+1", "加拿大": "+1", "英国": "+44", "法国": "+33", "德国": "+49", 
-            "意大利": "+39", "西班牙": "+34", "葡萄牙": "+351", "荷兰": "+31", "比利时": "+32",
-            "瑞士": "+41", "瑞典": "+46", "挪威": "+47", "丹麦": "+45", "芬兰": "+358",
-            "俄罗斯": "+7", "乌克兰": "+380", "波兰": "+48", "捷克": "+420", "匈牙利": "+36",
-            "澳大利亚": "+61", "新西兰": "+64", "日本": "+81", "韩国": "+82", "新加坡": "+65",
-            "马来西亚": "+60", "泰国": "+66", "越南": "+84", "菲律宾": "+63", "印度": "+91",
-            "印尼": "+62", "巴基斯坦": "+92", "沙特阿拉伯": "+966", "阿联酋": "+971",
-            "南非": "+27", "埃及": "+20", "尼日利亚": "+234", "肯尼亚": "+254",
-            "巴西": "+55", "墨西哥": "+52", "阿根廷": "+54", "智利": "+56", "哥伦比亚": "+57",
-            "厄瓜多尔": "+593", "秘鲁": "+51", "阿尔及利亚": "+213", "摩洛哥": "+212"
-        };
-
-        const countryDatalist = document.getElementById('countryList');
-        for (let country in countryData) {
-            let option = document.createElement('option');
-            option.value = country;
-            countryDatalist.appendChild(option);
-        }
-
-        function updateCountryCode() {
-            const countryInput = document.getElementById('m_country').value;
-            const codeInput = document.getElementById('m_countryCode');
-            codeInput.value = countryData[countryInput] || '';
-        }
-
-        // ========== 认证相关 ==========
-        let isLoginMode = true;
-
-        function toggleAuthMode() {
-            isLoginMode = !isLoginMode;
-            document.getElementById('authTitle').textContent = isLoginMode ? '登录' : '注册';
-            document.getElementById('authSubmitBtn').textContent = isLoginMode ? '登录' : '注册';
-            document.getElementById('authToggleText').textContent = isLoginMode ? '还没有账号？' : '已有账号？';
-            document.getElementById('authToggleLink').textContent = isLoginMode ? '立即注册' : '去登录';
-            document.getElementById('authDisplayName').style.display = isLoginMode ? 'none' : 'block';
-            document.getElementById('authPassword').setAttribute('autocomplete', isLoginMode ? 'current-password' : 'new-password');
-            document.getElementById('authError').textContent = '';
-        }
-
-        async function handleAuth() {
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value;
-            const displayName = document.getElementById('authDisplayName').value.trim();
-            const btn = document.getElementById('authSubmitBtn');
-            const errorEl = document.getElementById('authError');
-
-            if (!email || !password) {
-                errorEl.textContent = '请填写邮箱和密码';
-                return;
-            }
-            if (password.length < 6) {
-                errorEl.textContent = '密码至少6位';
-                return;
-            }
-
-            btn.disabled = true;
-            btn.textContent = isLoginMode ? '登录中...' : '注册中...';
-            errorEl.textContent = '';
-
-            try {
-                if (isLoginMode) {
-                    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                    if (error) throw error;
-                } else {
-                    const { data, error } = await supabase.auth.signUp({
-                        email,
-                        password,
-                        options: {
-                            data: { display_name: displayName || email.split('@')[0] },
-                            emailRedirectTo: window.location.href
-                        }
-                    });
-                    if (error) throw error;
-                    if (data.user && data.user.identities && data.user.identities.length === 0) {
-                        errorEl.textContent = '该邮箱已注册，请直接登录';
-                        btn.disabled = false;
-                        btn.textContent = '注册';
-                        return;
-                    }
-                    if (data.user && !data.session) {
-                        errorEl.textContent = '注册成功！请检查邮箱完成验证后再登录';
-                        btn.disabled = false;
-                        btn.textContent = '注册';
-                        return;
-                    }
-                }
-            } catch (err) {
-                errorEl.textContent = err.message || '操作失败，请重试';
-                btn.disabled = false;
-                btn.textContent = isLoginMode ? '登录' : '注册';
-            }
-        }
-
-        async function handleLogout() {
-            if (!confirm('确定要退出登录吗？')) return;
-            await supabase.auth.signOut();
-            showAuthPage();
-        }
-
-        function showAuthPage() {
-            document.getElementById('authContainer').classList.add('active');
-            document.getElementById('authEmail').value = '';
-            document.getElementById('authPassword').value = '';
-            document.getElementById('authDisplayName').value = '';
-            document.getElementById('authError').textContent = '';
-            isLoginMode = true;
-            toggleAuthMode();
-        }
-
-        function hideAuthPage() {
-            document.getElementById('authContainer').classList.remove('active');
-        }
-
-        async function checkAuth() {
-            if (!supabase) return false;
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                currentUser = session.user;
-                const displayName = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || '用户';
-                document.getElementById('displayUsername').textContent = displayName;
-                hideAuthPage();
-                return true;
-            }
-            return false;
-        }
-
-        // 监听登录状态变化
-        if (supabase) {
-            supabase.auth.onAuthStateChange((event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    currentUser = session.user;
-                    const displayName = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || '用户';
-                    document.getElementById('displayUsername').textContent = displayName;
-                    hideAuthPage();
-                    loadFromSupabase();
-                } else if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    clientData = [];
-                    renderTable([]);
-                    showAuthPage();
-                }
-            });
-        }
-
-        // ========== 数据管理 ==========
-        let clientData = [];
-
-        async function loadFromSupabase() {
-            if (!supabase || !currentUser) return false;
-            try {
-                const { data, error } = await supabase
-                    .from(TABLE_NAME)
-                    .select('*')
-                    .order('created_at', { ascending: true });
-
-                if (error) throw error;
-
-                clientData = (data || []).map(mapFromDB);
-                hideLoading();
-                setStatus('ready', `共 ${clientData.length} 条数据`);
-                applyFilters();
-                return true;
-            } catch (err) {
-                console.error('加载数据失败:', err);
-                hideLoading();
-                setStatus('error', '加载失败: ' + err.message);
-                alert('加载数据失败: ' + err.message);
-                return false;
-            }
-        }
-
-        async function insertToSupabase(record) {
-            try {
-                const { data, error } = await supabase
-                    .from(TABLE_NAME)
-                    .insert([record])
-                    .select();
-                if (error) throw error;
-                return data ? data[0] : null;
-            } catch (err) {
-                console.error('插入失败:', err);
-                alert('保存失败: ' + err.message);
-                return null;
-            }
-        }
-
-        async function updateToSupabase(id, record) {
-            try {
-                const { error } = await supabase
-                    .from(TABLE_NAME)
-                    .update(record)
-                    .eq('id', id);
-                if (error) throw error;
-                return true;
-            } catch (err) {
-                console.error('更新失败:', err);
-                alert('更新失败: ' + err.message);
-                return false;
-            }
-        }
-
-        async function deleteFromSupabase(ids) {
-            try {
-                const { error } = await supabase
-                    .from(TABLE_NAME)
-                    .delete()
-                    .in('id', ids);
-                if (error) throw error;
-                return true;
-            } catch (err) {
-                console.error('删除失败:', err);
-                alert('删除失败: ' + err.message);
-                return false;
-            }
-        }
-
-        async function bulkInsertToSupabase(records) {
-            try {
-                const { error } = await supabase.from(TABLE_NAME).insert(records);
-                if (error) throw error;
-                return true;
-            } catch (err) {
-                console.error('批量插入失败:', err);
-                alert('批量导入失败: ' + err.message);
-                return false;
-            }
-        }
-
-        // ========== 数据模型映射 ==========
-        function mapFromDB(row) {
-            const status = row.status || '潜在客户';
-            let countryClass = 'text-black';
-            if (status === '潜在客户') countryClass = 'text-blue';
-            else if (status === '重点跟进') countryClass = 'text-red';
-            else if (status === '下单完成') countryClass = 'text-green';
-
-            return {
-                id: row.id,
-                country: row.country || '',
-                countryCode: row.country_code || '',
-                time: row.follow_time || '',
-                company: row.company || '',
-                clientName: row.client_name || '',
-                phone: row.phone || '',
-                source: row.source || '',
-                status: status,
-                order: row.ord || '',
-                remarks: row.remarks || '',
-                countryClass: countryClass
-            };
-        }
-
-        // ========== UI 辅助 ==========
-        function showLoading() {
-            document.getElementById('loadingMask').classList.remove('hidden');
-        }
-        function hideLoading() {
-            document.getElementById('loadingMask').classList.add('hidden');
-        }
-        function setStatus(type, text) {
-            const bar = document.getElementById('statusBar');
-            const txt = bar.querySelector('.status-text');
-            bar.classList.remove('ready', 'error');
-            if (type) bar.classList.add(type);
-            txt.textContent = text;
-        }
-
-        // ========== 弹窗与逻辑 ==========
-        let editingId = null;
-
-        function openModal(id = null) {
-            editingId = id;
-            const modalTitle = document.getElementById('modalTitle');
-            const submitBtn = document.getElementById('submitBtn');
-            
-            if (id !== null) {
-                modalTitle.innerText = '修改客户信息';
-                submitBtn.innerText = '保存修改';
-                const item = clientData.find(d => d.id === id);
-                if (item) {
-                    document.getElementById('m_country').value = item.country;
-                    document.getElementById('m_countryCode').value = item.countryCode || '';
-                    let dateStr = item.time;
-                    if (dateStr) {
-                        const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-                        if (match) {
-                            const y = match[1], m = match[2].padStart(2, '0'), d = match[3].padStart(2, '0');
-                            dateStr = `${y}-${m}-${d}`;
-                        }
-                    }
-                    document.getElementById('m_time').value = dateStr;
-                    document.getElementById('m_company').value = item.company;
-                    document.getElementById('m_clientName').value = item.clientName;
-                    document.getElementById('m_phone').value = item.phone || '';
-                    document.getElementById('m_source').value = item.source;
-                    document.getElementById('m_status').value = item.status;
-                    document.getElementById('m_remarks').value = item.remarks;
-                }
-            } else {
-                modalTitle.innerText = '添加客户信息';
-                submitBtn.innerText = '确认添加';
-                document.getElementById('m_time').value = new Date().toISOString().split('T')[0];
-                document.getElementById('m_country').value = '';
-                document.getElementById('m_countryCode').value = '';
-                document.getElementById('m_company').value = '';
-                document.getElementById('m_clientName').value = '';
-                document.getElementById('m_phone').value = '';
-                document.getElementById('m_source').value = '';
-                document.getElementById('m_status').value = '重点跟进';
-                document.getElementById('m_remarks').value = '';
-            }
-            document.getElementById('addModal').classList.add('active');
-        }
-        
-        function closeModal() { document.getElementById('addModal').classList.remove('active'); }
-        function closeModalOutside(e) { if (e.target === document.getElementById('addModal')) closeModal(); }
-
-        function showRemarkInfo(text) {
-            if (text && text.trim() !== '') alert("📝 备注详情：\n\n" + text);
-            else alert("暂无备注信息");
-        }
-
-        function formatDate(dateStr) {
-            if (!dateStr) return '';
-            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                const parts = dateStr.split('-');
-                return `${parts[0]}年${parseInt(parts[1])}月${parseInt(parts[2])}日`;
-            }
-            return dateStr;
-        }
-
-        async function submitAddData() {
-            const country = document.getElementById('m_country').value.trim();
-            const countryCode = document.getElementById('m_countryCode').value.trim();
-            const time = document.getElementById('m_time').value.trim();
-            const company = document.getElementById('m_company').value.trim();
-            const clientName = document.getElementById('m_clientName').value.trim();
-            const phone = document.getElementById('m_phone').value.trim(); 
-            const source = document.getElementById('m_source').value.trim();
-            const status = document.getElementById('m_status').value.trim();
-            const remarks = document.getElementById('m_remarks').value.trim();
-
-            if (!country || !time) { alert("请至少填写【国家】和【时间】！"); return; }
-
-            let countryClass = 'text-black';
-            if (status === '潜在客户') countryClass = 'text-blue';
-            else if (status === '重点跟进') countryClass = 'text-red';
-            else if (status === '下单完成') countryClass = 'text-green';
-
-            showLoading();
-
-            if (editingId !== null) {
-                const record = {
-                    country, country_code: countryCode,
-                    follow_time: formatDate(time),
-                    company, client_name: clientName, phone, source, status, remarks
+                // ========== 国家与区号映射 ==========
+                const countryData = {
+                    "中国": "+86", "中国台湾": "+886", "中国香港": "+852", "中国澳门": "+853",
+                    "美国": "+1", "加拿大": "+1", "英国": "+44", "法国": "+33", "德国": "+49",
+                    "意大利": "+39", "西班牙": "+34", "葡萄牙": "+351", "荷兰": "+31", "比利时": "+32",
+                    "瑞士": "+41", "瑞典": "+46", "挪威": "+47", "丹麦": "+45", "芬兰": "+358",
+                    "俄罗斯": "+7", "乌克兰": "+380", "波兰": "+48", "捷克": "+420", "匈牙利": "+36",
+                    "澳大利亚": "+61", "新西兰": "+64", "日本": "+81", "韩国": "+82", "新加坡": "+65",
+                    "马来西亚": "+60", "泰国": "+66", "越南": "+84", "菲律宾": "+63", "印度": "+91",
+                    "印尼": "+62", "巴基斯坦": "+92", "沙特阿拉伯": "+966", "阿联酋": "+971",
+                    "南非": "+27", "埃及": "+20", "尼日利亚": "+234", "肯尼亚": "+254",
+                    "巴西": "+55", "墨西哥": "+52", "阿根廷": "+54", "智利": "+56", "哥伦比亚": "+57",
+                    "厄瓜多尔": "+593", "秘鲁": "+51", "阿尔及利亚": "+213", "摩洛哥": "+212"
                 };
-                const ok = await updateToSupabase(editingId, record);
-                if (ok) {
-                    const item = clientData.find(d => d.id === editingId);
-                    if (item) {
-                        Object.assign(item, {
-                            country, countryCode,
-                            time: formatDate(time),
-                            company, clientName, phone, source, status, remarks,
-                            countryClass
-                        });
-                    }
-                }
-            } else {
-                const record = {
-                    user_id: currentUser.id,
-                    country, country_code: countryCode,
-                    follow_time: formatDate(time),
-                    company, client_name: clientName, phone, source, status,
-                    ord: '', remarks
+                const sourceList = ["ins", "facebook", "whatsapp", "展会", "主动找我"];
+
+                // ========== 状态 ==========
+                const tableRef = ref(null);
+                const fullscreenLoading = ref(false);
+                const authDialogVisible = ref(false);
+                const authLoading = ref(false);
+                const isLoginMode = ref(true);
+                const authError = ref('');
+                const authForm = reactive({ email: '', password: '', displayName: '' });
+
+                const currentUser = ref(null);
+                const displayUsername = ref('--');
+
+                const clientData = ref([]);
+                const pageData = ref([]);
+                const currentFilters = reactive({ status: 'all', source: 'all' });
+                const pagination = reactive({ currentPage: 1, pageSize: 20, total: 0 });
+                const selectedRows = ref([]);
+                const loadingPage = ref(false);
+                const pageSizes = [10, 20, 50, 100];
+
+                const modalVisible = ref(false);
+                const editingId = ref(null);
+                const submitLoading = ref(false);
+                const form = reactive({
+                    country: '', countryCode: '', time: '', company: '',
+                    clientName: '', phone: '', source: '', status: '重点跟进', remarks: ''
+                });
+
+                const statusText = ref('连接中...');
+                const statusTagType = ref('info');
+
+                // ========== 工具方法 ==========
+                const getCountryClass = (status) => {
+                    if (status === '潜在客户') return 'country-potential';
+                    if (status === '重点跟进') return 'country-focus';
+                    if (status === '下单完成') return 'country-done';
+                    return 'country-default';
                 };
-                const inserted = await insertToSupabase(record);
-                if (inserted) {
-                    clientData.push(mapFromDB(inserted));
-                }
-            }
+                const updateCountryCode = () => {
+                    form.countryCode = countryData[form.country] || '';
+                };
 
-            hideLoading();
-            document.getElementById('selectAll').checked = false;
-            applyFilters();
-            closeModal();
-        }
+                const setStatus = (type, text) => {
+                    statusText.value = text;
+                    if (type === 'ready') statusTagType.value = 'success';
+                    else if (type === 'error') statusTagType.value = 'danger';
+                    else statusTagType.value = 'info';
+                };
 
-        // ========== 多选与批量删除 ==========
-        function toggleSelectAll(selectAllCheckbox) {
-            const checkboxes = document.querySelectorAll('.row-checkbox');
-            checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
-        }
+                const formatDate = (dateStr) => {
+                    if (!dateStr) return '';
+                    const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                    if (m) return `${m[1]}年${parseInt(m[2])}月${parseInt(m[3])}日`;
+                    return dateStr;
+                };
+                const parseDateForInput = (dateStr) => {
+                    if (!dateStr) return '';
+                    const m = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+                    if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+                    return dateStr;
+                };
 
-        function getSelectedIds() {
-            const ids = [];
-            document.querySelectorAll('.row-checkbox:checked').forEach(cb => {
-                ids.push(cb.getAttribute('data-id'));
-            });
-            return ids;
-        }
+                const mapFromDB = (row) => ({
+                    id: row.id,
+                    country: row.country || '',
+                    countryCode: row.country_code || '',
+                    time: row.follow_time || '',
+                    company: row.company || '',
+                    clientName: row.client_name || '',
+                    phone: row.phone || '',
+                    source: row.source || '',
+                    status: row.status || '潜在客户',
+                    order: row.ord || '',
+                    remarks: row.remarks || ''
+                });
 
-        async function batchDelete() {
-            const ids = getSelectedIds();
-            if (ids.length === 0) {
-                alert("请先在表格中勾选需要删除的客户行！");
-                return;
-            }
-            if(confirm(`确定要删除选中的 ${ids.length} 条客户数据吗？此操作不可撤销！`)) {
-                showLoading();
-                const ok = await deleteFromSupabase(ids);
-                if (ok) {
-                    clientData = clientData.filter(item => !ids.includes(item.id));
-                    document.getElementById('selectAll').checked = false;
-                    applyFilters();
-                }
-                hideLoading();
-            }
-        }
+                // ========== 认证 ==========
+                const toggleAuthMode = () => {
+                    isLoginMode.value = !isLoginMode.value;
+                    authError.value = '';
+                };
+                const showAuthPage = () => {
+                    authForm.email = ''; authForm.password = ''; authForm.displayName = '';
+                    authError.value = ''; isLoginMode.value = true;
+                    authDialogVisible.value = true;
+                };
+                const hideAuthPage = () => { authDialogVisible.value = false; };
 
-        // ========== 筛选与渲染 ==========
-        let currentFilters = { status: 'all', source: 'all' };
-
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const type = this.getAttribute('data-filter-type');
-                const value = this.getAttribute('data-filter-value');
-                currentFilters[type] = value;
-
-                const siblings = this.parentElement.querySelectorAll('.filter-btn');
-                siblings.forEach(sib => sib.classList.remove('active', 'active-blue', 'active-red', 'active-green', 'active-source'));
-                
-                if (type === 'status') {
-                    if (value === 'all') this.classList.add('active');
-                    else if (value === '潜在客户') this.classList.add('active-blue');
-                    else if (value === '重点跟进') this.classList.add('active-red');
-                    else if (value === '下单完成') this.classList.add('active-green');
-                } else if (type === 'source') {
-                    this.classList.add('active-source');
-                }
-                applyFilters();
-            });
-        });
-
-        function applyFilters() {
-            let filteredData = clientData;
-            if (currentFilters.status !== 'all') 
-                filteredData = filteredData.filter(item => item.status === currentFilters.status);
-            if (currentFilters.source !== 'all') 
-                filteredData = filteredData.filter(item => item.source === currentFilters.source);
-            renderTable(filteredData);
-        }
-
-        function renderTable(data) {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
-            data.sort((a, b) => a.id - b.id);
-
-            data.forEach((item, index) => {
-                const tr = document.createElement('tr');
-                const safeRemarks = (item.remarks || '').replace(/'/g, "\\'");
-
-                tr.innerHTML = `
-                    <td><input type="checkbox" class="row-checkbox" data-id="${item.id}"></td>
-                    <td>${index + 1}</td>
-                    <td class="${item.countryClass || 'text-black'}">
-                        ${item.country}<br><span style="font-size:10px;color:#888;">${item.countryCode || ''}</span>
-                    </td>
-                    <td>${item.time}</td>
-                    <td>${item.company}</td>
-                    <td>${item.clientName}</td>
-                    <td>${item.phone || ''}</td>
-                    <td>${item.source}</td>
-                    <td>${item.order}</td>
-                    <td>
-                        <div class="remark-cell">
-                            <span class="remark-text" onclick="showRemarkInfo('${safeRemarks}')">${item.remarks || ''}</span>
-                            <div class="action-icons">
-                                <button class="action-icon-btn edit" onclick="openModal(${item.id})" title="修改">✏️</button>
-                            </div>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        // ========== 导出与导入 ==========
-        function exportExcel() {
-            if (!clientData || clientData.length === 0) { alert("当前没有数据可以导出！"); return; }
-            
-            const excelRows = [
-                ["序号", "国家", "区号", "跟进时间", "公司", "客户名", "联系方式", "来源", "状态", "下单", "备注"]
-            ];
-
-            clientData.sort((a, b) => a.id - b.id).forEach((item, index) => {
-                excelRows.push([
-                    index + 1, item.country, item.countryCode || '', item.time,
-                    item.company, item.clientName, item.phone || '', 
-                    item.source, item.status, item.order, item.remarks
-                ]);
-            });
-
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(excelRows);
-            
-            ws['!cols'] = [
-                { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, 
-                { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 10 },
-                { wch: 10 }, { wch: 10 }, { wch: 30 }
-            ];
-
-            XLSX.utils.book_append_sheet(wb, ws, "客户数据");
-            const fileName = `客户信息表_${new Date().toISOString().split('T')[0]}.xlsx`;
-            XLSX.writeFile(wb, fileName);
-        }
-
-        function exportData() {
-            if (!clientData || clientData.length === 0) { alert("当前没有数据可以导出！"); return; }
-            
-            const exportPayload = clientData.map(item => ({
-                country: item.country,
-                countryCode: item.countryCode,
-                time: item.time,
-                company: item.company,
-                clientName: item.clientName,
-                phone: item.phone,
-                source: item.source,
-                status: item.status,
-                order: item.order,
-                remarks: item.remarks
-            }));
-
-            const dataString = JSON.stringify(exportPayload, null, 2);
-            const blob = new Blob([dataString], {type: "application/json"});
-            const url = URL.createObjectURL(blob);
-            const fileName = `客户数据备份_${new Date().toISOString().split('T')[0]}.json`;
-            
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            
-            a.dispatchEvent(new MouseEvent('click', {
-                bubbles: true,
-                cancelable: true,
-                view: window
-            }));
-            
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 1500);
-        }
-
-        async function importData(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                try {
-                    const importedData = JSON.parse(e.target.result);
-                    if (Array.isArray(importedData) && importedData.length > 0) {
-                        if(confirm(`找到 ${importedData.length} 条客户数据，确认要导入到云端吗？`)) {
-                            showLoading();
-                            const records = importedData.map(item => ({
-                                user_id: currentUser.id,
-                                country: item.country || '',
-                                country_code: item.countryCode || '',
-                                follow_time: item.time || '',
-                                company: item.company || '',
-                                client_name: item.clientName || '',
-                                phone: item.phone || '',
-                                source: item.source || '',
-                                status: item.status || '潜在客户',
-                                ord: item.order || '',
-                                remarks: item.remarks || ''
-                            }));
-                            const ok = await bulkInsertToSupabase(records);
-                            if (ok) {
-                                alert('导入成功！');
-                                await loadFromSupabase();
+                const handleAuth = async () => {
+                    const email = authForm.email.trim();
+                    const password = authForm.password;
+                    const displayName = authForm.displayName.trim();
+                    authError.value = '';
+                    if (!email || !password) { authError.value = '请填写邮箱和密码'; return; }
+                    if (password.length < 6) { authError.value = '密码至少6位'; return; }
+                    authLoading.value = true;
+                    try {
+                        if (isLoginMode.value) {
+                            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                            if (error) throw error;
+                        } else {
+                            const { data, error } = await supabase.auth.signUp({
+                                email, password,
+                                options: {
+                                    data: { display_name: displayName || email.split('@')[0] },
+                                    emailRedirectTo: window.location.href
+                                }
+                            });
+                            if (error) throw error;
+                            if (data.user && data.user.identities && data.user.identities.length === 0) {
+                                authError.value = '该邮箱已注册，请直接登录';
+                                return;
+                            }
+                            if (data.user && !data.session) {
+                                ElMessage.success('注册成功！请检查邮箱完成验证后再登录');
+                                isLoginMode.value = true;
+                                return;
                             }
                         }
-                    } else {
-                        alert('文件格式错误，请选择正确的 JSON 备份文件。');
+                    } catch (err) {
+                        authError.value = err.message || '操作失败，请重试';
+                    } finally {
+                        authLoading.value = false;
                     }
-                } catch (err) {
-                    alert('解析文件失败，请确认文件未被损坏。');
-                }
-            };
-            reader.readAsText(file);
-            event.target.value = '';
-        }
+                };
 
-        // ========== 启动 ==========
-        window.addEventListener('DOMContentLoaded', async function() {
-            if (!supabase) {
-                alert('请先在 table.html 中配置 SUPABASE_URL 和 SUPABASE_ANON_KEY');
-                return;
-            }
-            const loggedIn = await checkAuth();
-            if (!loggedIn) {
-                showAuthPage();
-            } else {
-                await loadFromSupabase();
+                const handleLogout = async () => {
+                    try {
+                        await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+                            confirmButtonText: '确定退出', cancelButtonText: '取消', type: 'warning'
+                        });
+                        await supabase.auth.signOut();
+                    } catch (e) { /* 取消 */ }
+                };
+
+                const checkAuth = async () => {
+                    if (!supabase) return false;
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session) {
+                        currentUser.value = session.user;
+                        const dn = session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || '用户';
+                        displayUsername.value = dn;
+                        hideAuthPage();
+                        return true;
+                    }
+                    return false;
+                };
+
+                // 表格重新布局
+                const relayoutTable = () => {
+                    nextTick(() => {
+                        if (tableRef.value) {
+                            tableRef.value.doLayout();
+                            setTimeout(() => { tableRef.value && tableRef.value.doLayout(); }, 300);
+                        }
+                    });
+                };
+                const handleWindowResize = () => {
+                    if (tableRef.value) tableRef.value.doLayout();
+                };
+
+                // ========== 数据加载（服务端分页） ==========
+                const buildQuery = () => {
+                    let q = supabase.from(TABLE_NAME).select('*', { count: 'exact' })
+                        .eq('user_id', currentUser.value.id);
+                    if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status);
+                    if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source);
+                    q = q.order('id', { ascending: true });
+                    return q;
+                };
+
+                const fetchPage = async () => {
+                    if (!supabase || !currentUser.value) return false;
+                    loadingPage.value = true;
+                    try {
+                        const from = (pagination.currentPage - 1) * pagination.pageSize;
+                        const to = from + pagination.pageSize - 1;
+                        const { data, error, count } = await buildQuery().range(from, to);
+                        console.log('fetchPage', data, error, count);
+                        if (error) throw error;
+                        pageData.value = (data || []).map(mapFromDB);
+                        pagination.total = count || 0;
+                        const totalPages = Math.max(1, Math.ceil(pagination.total / pagination.pageSize));
+                        if (pagination.currentPage > totalPages) {
+                            pagination.currentPage = totalPages;
+                            loadingPage.value = false;
+                            return fetchPage();
+                        }
+                        setStatus('ready', `共 ${pagination.total} 条数据 · 第 ${pagination.currentPage}/${totalPages} 页`);
+                        selectedRows.value = [];
+                        relayoutTable();
+                        return true;
+                    } catch (err) {
+                        console.error('加载数据失败:', err);
+                        setStatus('error', '加载失败');
+                        ElMessage.error('加载数据失败: ' + err.message);
+                        return false;
+                    } finally {
+                        loadingPage.value = false;
+                    }
+                };
+
+                const refreshData = async () => {
+                    pagination.currentPage = 1;
+                    await fetchPage();
+                };
+
+                const handleSizeChange = (size) => {
+                    pagination.pageSize = size;
+                    pagination.currentPage = 1;
+                    fetchPage();
+                    nextTick(() => { tableRef.value && tableRef.value.scrollTo({ top: 0 }); });
+                };
+                const handleCurrentChange = (page) => {
+                    pagination.currentPage = page;
+                    fetchPage();
+                    nextTick(() => { tableRef.value && tableRef.value.scrollTo({ top: 0 }); });
+                };
+
+                // ========== 弹窗表单 ==========
+                const resetForm = () => {
+                    form.country = ''; form.countryCode = '';
+                    form.time = new Date().toISOString().split('T')[0];
+                    form.company = ''; form.clientName = ''; form.phone = '';
+                    form.source = ''; form.status = '重点跟进'; form.remarks = '';
+                };
+
+                const openModal = async (id = null) => {
+                    editingId.value = id;
+                    if (id !== null) {
+                        // 编辑：优先从当前页找，找不到再单条查
+                        let item = pageData.value.find(d => d.id === id);
+                        if (!item) {
+                            try {
+                                const { data, error } = await supabase
+                                    .from(TABLE_NAME).select('*').eq('id', id).maybeSingle();
+                                if (!error && data) item = mapFromDB(data);
+                            } catch(e) {}
+                        }
+                        if (item) {
+                            form.country = item.country;
+                            form.countryCode = item.countryCode || '';
+                            form.time = parseDateForInput(item.time);
+                            form.company = item.company;
+                            form.clientName = item.clientName;
+                            form.phone = item.phone || '';
+                            form.source = item.source;
+                            form.status = item.status;
+                            form.remarks = item.remarks;
+                        }
+                    } else {
+                        resetForm();
+                    }
+                    modalVisible.value = true;
+                };
+
+                const showRemarkInfo = (text) => {
+                    if (text && text.trim() !== '') {
+                        ElMessageBox.alert(text, '📝 备注详情', { confirmButtonText: '关闭' });
+                    } else {
+                        ElMessage.info('暂无备注信息');
+                    }
+                };
+
+                const submitAddData = async () => {
+                    if (!form.country || !form.time) {
+                        ElMessage.warning('请至少填写【国家】和【跟进时间】！');
+                        return;
+                    }
+                    submitLoading.value = true;
+                    fullscreenLoading.value = true;
+                    try {
+                        const country = form.country.trim();
+                        const countryCode = form.countryCode.trim();
+                        const time = formatDate(form.time);
+                        const company = form.company.trim();
+                        const clientName = form.clientName.trim();
+                        const phone = form.phone.trim();
+                        const source = form.source;
+                        const status = form.status;
+                        const remarks = form.remarks.trim();
+
+                        if (editingId.value !== null) {
+                            const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks };
+                            const { error } = await supabase.from(TABLE_NAME).update(record).eq('id', editingId.value);
+                            if (error) throw error;
+                            ElMessage.success('修改成功！');
+                        } else {
+                            const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, ord: '', remarks };
+                            const { error } = await supabase.from(TABLE_NAME).insert([record]);
+                            if (error) throw error;
+                            ElMessage.success('添加成功！');
+                        }
+                        modalVisible.value = false;
+                        // 添加新数据后跳到第 1 页；修改后刷新当前页
+                        if (editingId.value !== null) await fetchPage();
+                        else await refreshData();
+                    } catch (err) {
+                        ElMessage.error('保存失败: ' + err.message);
+                    } finally {
+                        submitLoading.value = false;
+                        fullscreenLoading.value = false;
+                    }
+                };
+
+                // ========== 多选 & 批量删除 ==========
+                const handleSelectionChange = (rows) => { selectedRows.value = rows; };
+                const batchDelete = async () => {
+                    if (selectedRows.value.length === 0) {
+                        ElMessage.warning('请先在表格中勾选需要删除的客户行！');
+                        return;
+                    }
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定要删除选中的 ${selectedRows.value.length} 条客户数据吗？此操作不可撤销！`,
+                            '批量删除确认', { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning' }
+                        );
+                        fullscreenLoading.value = true;
+                        const ids = selectedRows.value.map(r => r.id);
+                        const { error } = await supabase.from(TABLE_NAME).delete().in('id', ids);
+                        if (error) throw error;
+                        ElMessage.success(`成功删除 ${ids.length} 条数据`);
+                        // 删完若当前页空且不是首页，回退一页；否则刷新当前页
+                        const restOnPage = pageData.value.filter(item => !ids.includes(item.id)).length;
+                        if (restOnPage === 0 && pagination.currentPage > 1) {
+                            pagination.currentPage -= 1;
+                        }
+                        await fetchPage();
+                    } catch (err) {
+                        if (err !== 'cancel') ElMessage.error('删除失败: ' + (err.message || err));
+                    } finally {
+                        fullscreenLoading.value = false;
+                    }
+                };
+
+                // ========== 筛选（切换时回到第一页） ==========
+                watch(currentFilters, () => {
+                    pagination.currentPage = 1;
+                    fetchPage();
+                });
+
+                // 序号列（跨页连续）
+                const indexMethod = (index) => {
+                    return (pagination.currentPage - 1) * pagination.pageSize + index + 1;
+                };
+
+                // ========== 导出导入 ==========
+                const fetchAll = async (applyFilters = false) => {
+                    let q = supabase.from(TABLE_NAME).select('*').eq('user_id', currentUser.value.id);
+                    if (applyFilters) {
+                        if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status);
+                        if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source);
+                    }
+                    q = q.order('id', { ascending: true });
+                    const { data, error } = await q;
+                    if (error) throw error;
+                    return (data || []).map(mapFromDB);
+                };
+
+                const exportExcel = async () => {
+                    if (pagination.total === 0) { ElMessage.warning('当前没有数据可以导出！'); return; }
+                    fullscreenLoading.value = true;
+                    try {
+                        const all = await fetchAll(true);
+                        if (all.length === 0) { ElMessage.warning('当前筛选条件下没有数据！'); return; }
+                        const excelRows = [["序号","国家","区号","跟进时间","公司","客户名","联系方式","来源","状态","下单","备注"]];
+                        all.forEach((item, index) => {
+                            excelRows.push([index+1, item.country, item.countryCode||'', item.time, item.company, item.clientName, item.phone||'', item.source||'', item.status, item.order||'', item.remarks]);
+                        });
+                        const wb = XLSX.utils.book_new();
+                        const ws = XLSX.utils.aoa_to_sheet(excelRows);
+                        ws['!cols'] = [{wch:6},{wch:12},{wch:8},{wch:16},{wch:18},{wch:12},{wch:16},{wch:10},{wch:12},{wch:8},{wch:30}];
+                        XLSX.utils.book_append_sheet(wb, ws, "客户数据");
+                        XLSX.writeFile(wb, `客户信息表_${new Date().toISOString().split('T')[0]}.xlsx`);
+                        ElMessage.success('Excel 导出成功！');
+                    } catch (err) {
+                        ElMessage.error('导出失败: ' + (err.message || err));
+                    } finally {
+                        fullscreenLoading.value = false;
+                    }
+                };
+
+                const exportData = async () => {
+                    if (pagination.total === 0) { ElMessage.warning('当前没有数据可以备份！'); return; }
+                    fullscreenLoading.value = true;
+                    try {
+                        const all = await fetchAll(false);
+                        if (all.length === 0) { ElMessage.warning('当前没有数据可以备份！'); return; }
+                        const payload = all.map(item => ({
+                            country: item.country, countryCode: item.countryCode, time: item.time,
+                            company: item.company, clientName: item.clientName, phone: item.phone,
+                            source: item.source, status: item.status, order: item.order, remarks: item.remarks
+                        }));
+                        const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `客户数据备份_${new Date().toISOString().split('T')[0]}.json`;
+                        a.style.display = 'none';
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+                        ElMessage.success('数据备份成功！');
+                    } catch (err) {
+                        ElMessage.error('备份失败: ' + (err.message || err));
+                    } finally {
+                        fullscreenLoading.value = false;
+                    }
+                };
+
+                const importData = (file) => {
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const imported = JSON.parse(e.target.result);
+                            if (!Array.isArray(imported) || imported.length === 0) {
+                                ElMessage.error('文件格式错误，请选择正确的 JSON 备份文件。');
+                                return false;
+                            }
+                            try {
+                                await ElMessageBox.confirm(
+                                    `找到 ${imported.length} 条客户数据，确认要导入到云端吗？`,
+                                    '数据恢复确认', { confirmButtonText:'确定导入', cancelButtonText:'取消', type:'info' }
+                                );
+                            } catch { return false; }
+
+                            fullscreenLoading.value = true;
+                            const records = imported.map(item => ({
+                                user_id: currentUser.value.id,
+                                country: item.country||'', country_code: item.countryCode||'',
+                                follow_time: item.time||'', company: item.company||'',
+                                client_name: item.clientName||'', phone: item.phone||'',
+                                source: item.source||'', status: item.status||'潜在客户',
+                                ord: item.order||'', remarks: item.remarks||''
+                            }));
+                            const { error } = await supabase.from(TABLE_NAME).insert(records);
+                            if (error) throw error;
+                            ElMessage.success('导入成功！');
+                            await refreshData();
+                        } catch (err) {
+                            ElMessage.error('解析文件失败，请确认文件未被损坏。' + (err.message||''));
+                        } finally {
+                            fullscreenLoading.value = false;
+                        }
+                    };
+                    reader.readAsText(file);
+                    return false;
+                };
+
+                // ========== 启动 ==========
+                onMounted(async () => {
+                    try {
+                        if (window.supabase) {
+                            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                        }
+                    } catch(e) { console.error('Supabase 初始化失败:', e); }
+
+                    if (!supabase) {
+                        ElMessage.error('Supabase 初始化失败，请检查网络或配置');
+                        return;
+                    }
+
+                    authListener = supabase.auth.onAuthStateChange(async (event, session) => {
+                        if (event === 'SIGNED_IN' && session) {
+                            currentUser.value = session.user;
+                            const dn = session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || '用户';
+                            displayUsername.value = dn;
+                            hideAuthPage();
+                            await refreshData();
+                        } else if (event === 'SIGNED_OUT') {
+                            currentUser.value = null;
+                            clientData.value = [];
+                            pageData.value = [];
+                            pagination.total = 0;
+                            pagination.currentPage = 1;
+                            showAuthPage();
+                        }
+                    });
+
+                    window.addEventListener('resize', handleWindowResize);
+
+                    const loggedIn = await checkAuth();
+                    if (!loggedIn) showAuthPage();
+                    else { await refreshData(); }
+                });
+
+                onBeforeUnmount(() => {
+                    if (authListener && authListener.data && authListener.data.subscription) {
+                        authListener.data.subscription.unsubscribe();
+                    }
+                    window.removeEventListener('resize', handleWindowResize);
+                });
+
+                return {
+                    tableRef,
+                    fullscreenLoading, authDialogVisible, authLoading, isLoginMode, authError, authForm,
+                    currentUser, displayUsername, clientData, pageData, currentFilters, selectedRows,
+                    pagination, loadingPage, pageSizes,
+                    modalVisible, editingId, submitLoading, form,
+                    statusText, statusTagType,
+                    countryData, sourceList,
+                    toggleAuthMode, handleAuth, handleLogout,
+                    openModal, showRemarkInfo, submitAddData, updateCountryCode,
+                    handleSelectionChange, batchDelete,
+                    exportExcel, exportData, importData, refreshData,
+                    fetchPage, handleCurrentChange, handleSizeChange,
+                    getCountryClass, indexMethod
+                };
             }
         });
+
+        app.use(ElementPlus);
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+            app.component(key, component);
+        }
+        app.mount('#app');
     </script>
 </body>
 </html>
