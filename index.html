@@ -14,8 +14,24 @@
     <script src="https://unpkg.com/@element-plus/icons-vue"></script>
     <!-- XLSX -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-    <!-- Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+    <!-- Supabase（备用 unpkg，防止 jsdelivr 在国内加载失败） -->
+    <script>
+        // 日志小助手，方便排查
+        window.__LOG = (tag, ...args) => {
+            const t = new Date().toLocaleTimeString();
+            console.log(`[${t}] [${tag}]`, ...args);
+        };
+        window.__LOG('BOOT', '页面脚本开始执行，准备加载 Supabase CDN');
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"
+            onerror="window.__SUPABASE_CDN_FAIL=true;console.error('[BOOT] jsdelivr CDN 加载失败，尝试 unpkg 备用');">
+    </script>
+    <script>
+        // jsdelivr 失败则切换 unpkg（使用稳定版 2.45.4）
+        if (window.__SUPABASE_CDN_FAIL || (!window.supabase && !window.supabaseJs)) {
+            document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"><\/script>');
+        }
+    </script>
     <style>
         * { box-sizing: border-box; }
         html, body {
@@ -491,6 +507,22 @@
 
                 let supabase = null;
                 let authListener = null;
+                const bootReady = ref(false);     // 启动流程完成前，onAuthStateChange 不主动发查询
+                let authPending = false;          // auth 操作互斥锁，避免与数据查询死锁
+
+                // 超时工具：防止 Promise 永久 pending
+                const withTimeout = (promise, ms, label) => {
+                    return new Promise((resolve, reject) => {
+                        const timer = setTimeout(() => {
+                            reject(new Error(`[TIMEOUT] ${label} 超时（${ms}ms）`));
+                        }, ms);
+                        promise.then(
+                            (v) => { clearTimeout(timer); resolve(v); },
+                            (e) => { clearTimeout(timer); reject(e); }
+                        );
+                    });
+                };
+                const LOG = (tag, ...args) => window.__LOG ? window.__LOG(tag, ...args) : console.log(`[${tag}]`, ...args);
 
                 // ========== 国家与区号映射 ==========
                 const countryData = {
@@ -683,12 +715,18 @@
                 };
 
                 const fetchPage = async () => {
-                    if (loadingPage.value) return false;
+                    LOG('FETCH', 'fetchPage 被调用，loadingPage=', loadingPage.value,
+                        'supabase=', !!supabase, 'currentUser=', !!currentUser.value,
+                        'page=', pagination.currentPage, 'pageSize=', pagination.pageSize,
+                        'filters=', { ...currentFilters });
+                    if (loadingPage.value) { LOG('FETCH', '正在加载中，跳过重复调用'); return false; }
                     if (!supabase) {
+                        LOG('FETCH', 'supabase 尚未初始化，无法拉数据');
                         ElMessage.warning('云端服务尚未初始化，请稍候重试');
                         return false;
                     }
                     if (!currentUser.value) {
+                        LOG('FETCH', 'currentUser 为空，弹登录框');
                         ElMessage.warning('请先登录后再加载数据');
                         showAuthPage();
                         return false;
@@ -697,12 +735,19 @@
                     try {
                         const from = (pagination.currentPage - 1) * pagination.pageSize;
                         const to = from + pagination.pageSize - 1;
-                        const { data, error, count } = await buildQuery().range(from, to);
+                        LOG('FETCH', '发起 supabase 查询 range=', from, '-', to);
+                        const { data, error, count } = await withTimeout(
+                            buildQuery().range(from, to),
+                            15000,
+                            `分页查询 page=${pagination.currentPage}`
+                        );
+                        LOG('FETCH', '查询返回，rows=', (data||[]).length, 'count=', count, 'error=', error);
                         if (error) throw error;
                         pageData.value = (data || []).map(mapFromDB);
                         pagination.total = count || 0;
                         const totalPages = Math.max(1, Math.ceil(pagination.total / pagination.pageSize));
                         if (pagination.currentPage > totalPages) {
+                            LOG('FETCH', '当前页超出范围，回退到最后一页 totalPages=', totalPages);
                             pagination.currentPage = totalPages;
                             loadingPage.value = false;
                             return fetchPage();
@@ -710,32 +755,43 @@
                         setStatus('ready', `共 ${pagination.total} 条数据 · 第 ${pagination.currentPage}/${totalPages} 页`);
                         selectedRows.value = [];
                         relayoutTable();
+                        LOG('FETCH', '加载成功 pageData 条数=', pageData.value.length);
                         return true;
                     } catch (err) {
+                        LOG('FETCH', '加载失败 err=', err);
                         console.error('加载数据失败:', err);
                         setStatus('error', '加载失败');
-                        ElMessage.error('加载数据失败: ' + err.message);
+                        ElMessage.error('加载数据失败: ' + (err?.message || err));
                         return false;
                     } finally {
                         loadingPage.value = false;
+                        LOG('FETCH', 'fetchPage 结束，loadingPage=false');
                     }
                 };
 
                 const refreshing = ref(false);
                 const refreshData = async (silent = false) => {
+                    LOG('REFRESH', 'refreshData 被调用 silent=', silent,
+                        'supabase=', !!supabase, 'currentUser=', !!currentUser.value);
                     if (!supabase || !currentUser.value) {
+                        LOG('REFRESH', '未就绪 supabase/currentUser，跳过');
                         if (!silent) ElMessage.warning('请先登录');
+                        fullscreenLoading.value = false;
                         return false;
                     }
-                    if (refreshing.value) return false;
+                    if (refreshing.value) { LOG('REFRESH', '正在刷新中，跳过重复调用'); return false; }
                     refreshing.value = true;
+                    // 首次启动时 silent=true 也显示全屏加载提示
+                    if (silent && !fullscreenLoading.value) fullscreenLoading.value = true;
                     try {
                         pagination.currentPage = 1;
                         const ok = await fetchPage();
                         if (ok && !silent) ElMessage.success('数据已刷新');
+                        LOG('REFRESH', 'refreshData 完成 ok=', ok);
                         return ok;
                     } finally {
                         refreshing.value = false;
+                        fullscreenLoading.value = false;
                     }
                 };
 
@@ -983,63 +1039,133 @@
 
                 // ========== 启动 ==========
                 onMounted(async () => {
+                    LOG('MOUNT', 'onMounted 触发，准备初始化 Supabase');
+                    LOG('MOUNT', 'window 上 supabase 相关全局：', {
+                        supabase: typeof window.supabase,
+                        supabaseJs: typeof window.supabaseJs,
+                        createClient: window.supabase?.createClient ? '有' : '无'
+                    });
+
                     try {
-                        if (window.supabase) {
-                            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-                                auth: { persistSession: true, autoRefreshToken: true }
+                        // 兼容 UMD 可能不同的全局名
+                        const sb = window.supabase || window.supabaseJs;
+                        if (sb && sb.createClient) {
+                            supabase = sb.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                                auth: {
+                                    persistSession: true,
+                                    autoRefreshToken: true,
+                                    detectSessionInUrl: false,
+                                    storageKey: 'sb-client-auth',
+                                    storage: window.localStorage
+                                },
+                                global: {
+                                    fetch: (...args) => fetch(...args)
+                                }
                             });
+                            LOG('MOUNT', 'Supabase client 创建成功', !!supabase);
+                        } else {
+                            throw new Error('Supabase SDK 未加载，请检查网络');
                         }
-                    } catch(e) { console.error('Supabase 初始化失败:', e); }
+                    } catch(e) {
+                        LOG('MOUNT', 'Supabase 初始化异常：', e);
+                        console.error('Supabase 初始化失败:', e);
+                    }
 
                     if (!supabase) {
                         setStatus('error', '初始化失败');
-                        ElMessage.error('Supabase 初始化失败，请检查网络或配置');
+                        ElMessage.error('Supabase 初始化失败，请检查网络后刷新页面');
+                        clearUser();
                         showAuthPage();
+                        LOG('MOUNT', '初始化失败，已弹登录框（兜底）');
                         return;
                     }
 
-                    let initialFired = false;
+                    // 挂载 auth 事件监听
+                    // 注意：启动阶段（bootReady=false）onAuthStateChange 可能先于 getSession 触发 SIGNED_IN，
+                    // 此时不要在监听器里 await refreshData，否则会与 onMounted 里的 getSession 形成 auth 内部死锁，
+                    // 导致 HTTP 请求永远 pending。
+                    // 启动流程由下方主动 getSession() 统一驱动。
                     authListener = supabase.auth.onAuthStateChange(async (event, session) => {
-                        // 统一入口：覆盖所有会话事件
-                        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                            if (session && session.user) {
-                                applyUser(session.user);
-                                await refreshData(true);
-                            } else if (initialFired) {
-                                // 初始检查就没登录
-                                clearUser();
-                                showAuthPage();
-                            } else {
-                                clearUser();
-                                showAuthPage();
-                            }
-                            initialFired = true;
-                        } else if (event === 'SIGNED_OUT') {
+                        LOG('AUTH', 'onAuthStateChange event=', event, 'session=', !!session, 'user=', !!session?.user, 'bootReady=', bootReady.value);
+                        if (event === 'SIGNED_OUT') {
                             clearUser();
                             showAuthPage();
                             ElMessage.info('已退出登录');
+                            return;
+                        }
+                        if (event === 'TOKEN_REFRESHED' && bootReady.value && session?.user) {
+                            applyUser(session.user);
+                            // token 刷新静默刷当前页（只在已启动后做）
+                            try { await fetchPage(); } catch(e) { console.warn(e); }
+                            return;
+                        }
+                        if (event === 'SIGNED_IN') {
+                            // 登录/注册是用户主动操作，此时 bootReady 应该已经是 true，直接拉数据
+                            if (session?.user) applyUser(session.user);
+                            if (bootReady.value) {
+                                LOG('AUTH', 'SIGNED_IN after boot, refresh data');
+                                try { await refreshData(true); } catch(e) { console.warn(e); }
+                            } else {
+                                // 启动阶段 SDK 自动恢复触发的 SIGNED_IN：只 apply user，不发请求，交给下方 getSession 统一处理
+                                LOG('AUTH', 'SIGNED_IN during boot, defer refreshData to onMounted getSession');
+                            }
+                            return;
                         }
                     });
+                    LOG('MOUNT', 'onAuthStateChange 监听已挂载');
 
                     window.addEventListener('resize', handleWindowResize);
 
-                    // 兜底：如果 1.5 秒后 onAuthStateChange 仍未触发 INITIAL_SESSION（极少情况），主动 getSession
-                    setTimeout(async () => {
-                        if (!initialFired && supabase) {
-                            try {
-                                const { data: { session } } = await supabase.auth.getSession();
-                                if (session && session.user) applyUser(session.user);
-                                else { clearUser(); showAuthPage(); }
-                                if (!initialFired && session?.user) await refreshData(true);
-                                initialFired = true;
-                            } catch (e) {
-                                console.error('兜底 getSession 失败:', e);
-                                clearUser();
-                                showAuthPage();
-                                initialFired = true;
-                            }
+                    // 主动获取会话（F5 刷新后的唯一启动入口）
+                    // 关键：onAuthStateChange 挂载完后立即 await getSession，监听器里启动阶段不再发任何数据请求，
+                    // 避免 SDK 内部 auth 锁竞争导致 Promise 永久 pending（表现为 Network 无请求、一直 loading）。
+                    let initialSession = null;
+                    try {
+                        LOG('MOUNT', '调用 supabase.auth.getSession() 获取会话...');
+                        const sessionResult = await withTimeout(
+                            supabase.auth.getSession(),
+                            15000,
+                            'supabase.auth.getSession()'
+                        );
+                        const { data: { session }, error } = sessionResult;
+                        LOG('MOUNT', 'getSession 返回 session=', !!session, 'user=', !!session?.user, 'error=', error);
+                        if (error) throw error;
+                        initialSession = session;
+                    } catch (e) {
+                        LOG('MOUNT', 'getSession 异常：', e);
+                        console.error('getSession 失败:', e);
+                        // 兜底：等 500ms 检查 currentUser 是否已被监听器提前设置（启动阶段 SIGNED_IN 可能比 getSession 先到）
+                        await new Promise(r => setTimeout(r, 500));
+                        if (currentUser.value) {
+                            LOG('MOUNT', '兜底：currentUser 已被监听器设置，继续流程');
+                            initialSession = { user: currentUser.value };
                         }
-                    }, 1500);
+                    }
+
+                    // 标记启动完成，之后 onAuthStateChange 中的 SIGNED_IN/TOKEN_REFRESHED 才允许主动发数据查询
+                    bootReady.value = true;
+                    LOG('MOUNT', 'bootReady = true');
+
+                    if (initialSession && initialSession.user) {
+                        applyUser(initialSession.user);
+                        LOG('MOUNT', '已 applyUser，开始 refreshData');
+                        try {
+                            await refreshData(true);
+                            LOG('MOUNT', 'refreshData 完成');
+                        } catch(e) {
+                            LOG('MOUNT', 'refreshData 异常：', e);
+                            console.error('首次加载数据失败:', e);
+                            ElMessage.error('数据加载失败：' + (e.message || e));
+                            setStatus('error', '加载失败');
+                            fullscreenLoading.value = false;
+                            loadingPage.value = false;
+                        }
+                    } else {
+                        LOG('MOUNT', '无会话，弹登录框');
+                        clearUser();
+                        showAuthPage();
+                    }
+                    LOG('MOUNT', 'onMounted 流程结束');
                 });
 
                 onBeforeUnmount(() => {
