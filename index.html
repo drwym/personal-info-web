@@ -760,7 +760,7 @@
         function getSelectedIds() {
             const ids = [];
             document.querySelectorAll('.row-checkbox:checked').forEach(cb => {
-                ids.push(parseInt(cb.getAttribute('data-id')));
+                ids.push(cb.getAttribute('data-id'));
             });
             return ids;
         }
