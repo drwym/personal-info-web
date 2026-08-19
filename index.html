@@ -294,7 +294,7 @@
                         </el-radio-group>
                     </div>
                     <div class="filter-group" style="margin-left:auto;">
-                        <el-button type="primary" @click="refreshData">
+                        <el-button type="primary" :loading="refreshing" @click="refreshData()">
                             <el-icon><Refresh></Refresh></el-icon> 刷新数据
                         </el-button>
                     </div>
@@ -596,6 +596,22 @@
                 };
                 const hideAuthPage = () => { authDialogVisible.value = false; };
 
+                const applyUser = (user) => {
+                    currentUser.value = user;
+                    const dn = user?.user_metadata?.display_name || user?.email?.split('@')[0] || '用户';
+                    displayUsername.value = dn;
+                    hideAuthPage();
+                };
+
+                const clearUser = () => {
+                    currentUser.value = null;
+                    clientData.value = [];
+                    pageData.value = [];
+                    pagination.total = 0;
+                    pagination.currentPage = 1;
+                    setStatus('info', '未登录');
+                };
+
                 const handleAuth = async () => {
                     const email = authForm.email.trim();
                     const password = authForm.password;
@@ -643,19 +659,6 @@
                     } catch (e) { /* 取消 */ }
                 };
 
-                const checkAuth = async () => {
-                    if (!supabase) return false;
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session) {
-                        currentUser.value = session.user;
-                        const dn = session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || '用户';
-                        displayUsername.value = dn;
-                        hideAuthPage();
-                        return true;
-                    }
-                    return false;
-                };
-
                 // 表格重新布局
                 const relayoutTable = () => {
                     nextTick(() => {
@@ -680,7 +683,16 @@
                 };
 
                 const fetchPage = async () => {
-                    if (!supabase || !currentUser.value) return false;
+                    if (loadingPage.value) return false;
+                    if (!supabase) {
+                        ElMessage.warning('云端服务尚未初始化，请稍候重试');
+                        return false;
+                    }
+                    if (!currentUser.value) {
+                        ElMessage.warning('请先登录后再加载数据');
+                        showAuthPage();
+                        return false;
+                    }
                     loadingPage.value = true;
                     try {
                         const from = (pagination.currentPage - 1) * pagination.pageSize;
@@ -709,9 +721,22 @@
                     }
                 };
 
-                const refreshData = async () => {
-                    pagination.currentPage = 1;
-                    await fetchPage();
+                const refreshing = ref(false);
+                const refreshData = async (silent = false) => {
+                    if (!supabase || !currentUser.value) {
+                        if (!silent) ElMessage.warning('请先登录');
+                        return false;
+                    }
+                    if (refreshing.value) return false;
+                    refreshing.value = true;
+                    try {
+                        pagination.currentPage = 1;
+                        const ok = await fetchPage();
+                        if (ok && !silent) ElMessage.success('数据已刷新');
+                        return ok;
+                    } finally {
+                        refreshing.value = false;
+                    }
                 };
 
                 const handleSizeChange = (size) => {
@@ -960,37 +985,61 @@
                 onMounted(async () => {
                     try {
                         if (window.supabase) {
-                            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                                auth: { persistSession: true, autoRefreshToken: true }
+                            });
                         }
                     } catch(e) { console.error('Supabase 初始化失败:', e); }
 
                     if (!supabase) {
+                        setStatus('error', '初始化失败');
                         ElMessage.error('Supabase 初始化失败，请检查网络或配置');
+                        showAuthPage();
                         return;
                     }
 
+                    let initialFired = false;
                     authListener = supabase.auth.onAuthStateChange(async (event, session) => {
-                        if (event === 'SIGNED_IN' && session) {
-                            currentUser.value = session.user;
-                            const dn = session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || '用户';
-                            displayUsername.value = dn;
-                            hideAuthPage();
-                            await refreshData();
+                        // 统一入口：覆盖所有会话事件
+                        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                            if (session && session.user) {
+                                applyUser(session.user);
+                                await refreshData(true);
+                            } else if (initialFired) {
+                                // 初始检查就没登录
+                                clearUser();
+                                showAuthPage();
+                            } else {
+                                clearUser();
+                                showAuthPage();
+                            }
+                            initialFired = true;
                         } else if (event === 'SIGNED_OUT') {
-                            currentUser.value = null;
-                            clientData.value = [];
-                            pageData.value = [];
-                            pagination.total = 0;
-                            pagination.currentPage = 1;
+                            clearUser();
                             showAuthPage();
+                            ElMessage.info('已退出登录');
                         }
                     });
 
                     window.addEventListener('resize', handleWindowResize);
 
-                    const loggedIn = await checkAuth();
-                    if (!loggedIn) showAuthPage();
-                    else { await refreshData(); }
+                    // 兜底：如果 1.5 秒后 onAuthStateChange 仍未触发 INITIAL_SESSION（极少情况），主动 getSession
+                    setTimeout(async () => {
+                        if (!initialFired && supabase) {
+                            try {
+                                const { data: { session } } = await supabase.auth.getSession();
+                                if (session && session.user) applyUser(session.user);
+                                else { clearUser(); showAuthPage(); }
+                                if (!initialFired && session?.user) await refreshData(true);
+                                initialFired = true;
+                            } catch (e) {
+                                console.error('兜底 getSession 失败:', e);
+                                clearUser();
+                                showAuthPage();
+                                initialFired = true;
+                            }
+                        }
+                    }, 1500);
                 });
 
                 onBeforeUnmount(() => {
@@ -1004,7 +1053,7 @@
                     tableRef,
                     fullscreenLoading, authDialogVisible, authLoading, isLoginMode, authError, authForm,
                     currentUser, displayUsername, clientData, pageData, currentFilters, selectedRows,
-                    pagination, loadingPage, pageSizes,
+                    pagination, loadingPage, pageSizes, refreshing,
                     modalVisible, editingId, submitLoading, form,
                     statusText, statusTagType,
                     countryData, sourceList,
