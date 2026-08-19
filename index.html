@@ -686,7 +686,6 @@
                         const from = (pagination.currentPage - 1) * pagination.pageSize;
                         const to = from + pagination.pageSize - 1;
                         const { data, error, count } = await buildQuery().range(from, to);
-                        console.log('fetchPage', data, error, count);
                         if (error) throw error;
                         pageData.value = (data || []).map(mapFromDB);
                         pagination.total = count || 0;
