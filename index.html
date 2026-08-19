@@ -12,6 +12,8 @@
     <script src="https://unpkg.com/element-plus"></script>
     <!-- Element Plus Icons -->
     <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+    <!-- Element Plus 中文语言包 -->
+    <script src="https://cdn.jsdelivr.net/npm/element-plus@2.8.8/dist/locale/zh-cn.min.js"></script>
     <!-- XLSX -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <!-- Supabase（备用 unpkg，防止 jsdelivr 在国内加载失败） -->
@@ -1115,10 +1117,8 @@
                     return (pagination.currentPage - 1) * pagination.pageSize + index + 1;
                 };
 
-                // 分页布局随设备动态变化
-                const pagerLayout = computed(() => {
-                    return isMobile.value ? 'total, prev, pager, next' : 'total, sizes, prev, pager, next, jumper';
-                });
+                // 分页布局：统一使用 sizes, prev, pager, next（用户要求精简版），不分端差异
+                const pagerLayout = computed(() => 'sizes, prev, pager, next');
 
                 // ========== 导出导入 ==========
                 const fetchAll = async (applyFilters = false) => {
@@ -1281,20 +1281,27 @@
                         }
                         if (event === 'TOKEN_REFRESHED' && bootReady.value && session?.user) {
                             applyUser(session.user);
-                            // token 刷新静默刷当前页（只在已启动后做）
-                            try { await fetchPage(); } catch(e) { console.warn(e); }
+                            // token 自动刷新（如切回标签页触发）：仅静默续期 session，不重复拉数据，避免打断用户操作
+                            LOG('AUTH', 'TOKEN_REFRESHED，已应用新 token，不刷新列表');
                             return;
                         }
                         if (event === 'SIGNED_IN') {
-                            // 登录/注册是用户主动操作，此时 bootReady 应该已经是 true，直接拉数据
+                            const prevId = currentUser.value?.id;
+                            const newId = session?.user?.id;
                             if (session?.user) applyUser(session.user);
-                            if (bootReady.value) {
-                                LOG('AUTH', 'SIGNED_IN after boot, refresh data');
-                                try { await refreshData(true); } catch(e) { console.warn(e); }
-                            } else {
-                                // 启动阶段 SDK 自动恢复触发的 SIGNED_IN：只 apply user，不发请求，交给下方 getSession 统一处理
+                            // 仅在真正"登录状态发生变化"时才拉数据：
+                            // 1) 启动阶段：交给下方 getSession 统一处理，避免 SDK 锁死锁
+                            // 2) 启动后：之前未登录 / 切换账号 → 拉数据；同一用户重复 SIGNED_IN（切标签页、token 恢复）→ 不拉
+                            if (!bootReady.value) {
                                 LOG('AUTH', 'SIGNED_IN during boot, defer refreshData to onMounted getSession');
+                                return;
                             }
+                            if (prevId && newId && prevId === newId) {
+                                LOG('AUTH', 'SIGNED_IN for same user (tab re-focus / token recovery), skip refresh');
+                                return;
+                            }
+                            LOG('AUTH', 'SIGNED_IN new login/account switch, refresh data');
+                            try { await refreshData(true); } catch(e) { console.warn(e); }
                             return;
                         }
                     });
@@ -1384,7 +1391,7 @@
             }
         });
 
-        app.use(ElementPlus);
+        app.use(ElementPlus, { locale: ElementPlusLocaleZhCn });
         for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
             app.component(key, component);
         }
