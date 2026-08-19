@@ -310,43 +310,6 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5za3FqdWtia2V6bnBzZXJ4aWxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTU1MjYsImV4cCI6MjEwMjU3MTUyNn0.1f_1gPJPtu1V-XXBpis3afmn7TxevYKbGbBT2htRCpE';
         const TABLE_NAME = 'client_info';
 
-        // Supabase 建表 SQL（在 Supabase SQL Editor 中执行）:
-        //
-        // -- 1. 创建客户信息表（增加 user_id 关联）
-        // create table client_info (
-        //   id uuid default gen_random_uuid() primary key,
-        //   user_id uuid not null references auth.users(id),
-        //   country text,
-        //   country_code text,
-        //   follow_time text,
-        //   company text,
-        //   client_name text,
-        //   phone text,
-        //   source text,
-        //   status text,
-        //   ord text,
-        //   remarks text,
-        //   created_at timestamptz default now()
-        // );
-        //
-        // -- 2. 启用 RLS（行级安全），每个用户只能访问自己的数据
-        // alter table client_info enable row level security;
-        //
-        // create policy "用户只能查看自己的数据" on client_info
-        //   for select using (auth.uid() = user_id);
-        //
-        // create policy "用户只能插入自己的数据" on client_info
-        //   for insert with check (auth.uid() = user_id);
-        //
-        // create policy "用户只能更新自己的数据" on client_info
-        //   for update using (auth.uid() = user_id);
-        //
-        // create policy "用户只能删除自己的数据" on client_info
-        //   for delete using (auth.uid() = user_id);
-        //
-        // -- 3. 创建索引加速查询
-        // create index idx_client_info_user_id on client_info(user_id);
-
         // 初始化 Supabase 客户端
         let supabase = null;
         let currentUser = null;
