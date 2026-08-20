@@ -561,13 +561,18 @@
                     empty-text="暂无来源选项"
                 >
                     <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
-                    <el-table-column label="来源名称" prop="name" align="center"></el-table-column>
+                    <el-table-column label="来源名称" prop="name" align="center">
+                        <template #default="{ row }">
+                            {{ row.name }}
+                            <el-tag v-if="row.isGlobal" size="small" type="warning" effect="plain" style="margin-left:4px;">全局</el-tag>
+                        </template>
+                    </el-table-column>
                     <el-table-column label="操作" width="140" align="center">
                         <template #default="{ row }">
-                            <el-button link type="primary" size="small" @click="openSourceForm(row)">
+                            <el-button link type="primary" size="small" :disabled="row.isGlobal" @click="openSourceForm(row)">
                                 <el-icon><Edit></Edit></el-icon> 编辑
                             </el-button>
-                            <el-button link type="danger" size="small" @click="deleteSourceOption(row)">
+                            <el-button link type="danger" size="small" :disabled="row.isGlobal" @click="deleteSourceOption(row)">
                                 <el-icon><Delete></Delete></el-icon> 删除
                             </el-button>
                         </template>
@@ -822,13 +827,21 @@
                 const fetchSourceOptions = async () => {
                     if (!supabase || !currentUser.value) return;
                     try {
-                        const { data, error } = await supabase
+                        const { data: globalData, error: e1 } = await supabase
+                            .from(SOURCE_TABLE_NAME)
+                            .select('*')
+                            .eq('is_global', true)
+                            .order('sort_order', { ascending: true });
+                        const { data: userData, error: e2 } = await supabase
                             .from(SOURCE_TABLE_NAME)
                             .select('*')
                             .eq('user_id', currentUser.value.id)
                             .order('sort_order', { ascending: true });
-                        if (error) throw error;
-                        sourceOptions.value = (data || []).map(r => ({ id: r.id, name: r.name, sortOrder: r.sort_order || 0 }));
+                        if (e1) throw e1;
+                        if (e2) throw e2;
+                        const globalItems = (globalData || []).map(r => ({ id: r.id, name: r.name, sortOrder: r.sort_order || 0, isGlobal: true }));
+                        const userItems = (userData || []).map(r => ({ id: r.id, name: r.name, sortOrder: r.sort_order || 0, isGlobal: false }));
+                        sourceOptions.value = [...globalItems, ...userItems];
                         sourceList.value = sourceOptions.value.map(o => o.name);
                     } catch (err) {
                         LOG('SOURCE', '加载来源选项失败:', err);
@@ -874,7 +887,7 @@
                                 ? Math.max(...sourceOptions.value.map(o => o.sortOrder)) + 1 : 1;
                             const { error } = await supabase
                                 .from(SOURCE_TABLE_NAME)
-                                .insert([{ user_id: currentUser.value.id, name, sort_order: maxSort }]);
+                                .insert([{ user_id: currentUser.value.id, name, sort_order: maxSort, is_global: false }]);
                             if (error) throw error;
                             ElMessage.success('添加来源成功');
                         }
