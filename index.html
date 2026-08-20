@@ -830,7 +830,7 @@
                 const submitLoading = ref(false);
                 const form = reactive({
                     country: '', countryCode: '', time: '', company: '',
-                    clientName: '', phone: '', source: '', status: '重点跟进', remarks: '', userCode: ''
+                    clientName: '', phone: '', source: '', status: '重点跟进', remarks: ''
                 });
 
                 const statusText = ref('连接中...');
@@ -1083,7 +1083,7 @@
                     if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status);
                     if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source);
                     if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`);
-                    q = q.order('created_at', { ascending: false });
+                    q = q.order('user_code', { ascending: true });
                     return q;
                 };
 
@@ -1185,7 +1185,7 @@
                 const resetForm = () => {
                     form.country = ''; form.countryCode = '';
                     form.time = new Date().toISOString().split('T')[0];
-                    form.company = ''; form.clientName = ''; form.userCode = ''; form.phone = '';
+                    form.company = ''; form.clientName = ''; form.phone = '';
                     form.source = ''; form.status = '重点跟进'; form.remarks = '';
                 };
 
@@ -1207,7 +1207,6 @@
                             form.time = parseDateForInput(item.time);
                             form.company = item.company;
                             form.clientName = item.clientName;
-                            form.userCode = item.userCode || '';
                             form.phone = item.phone || '';
                             form.source = item.source;
                             form.status = item.status;
@@ -1227,6 +1226,20 @@
                     }
                 };
 
+                // 生成下一个用户编码
+                const generateUserCode = async () => {
+                    const { data, error } = await supabase
+                        .from(TABLE_NAME)
+                        .select('user_code')
+                        .eq('user_id', currentUser.value.id)
+                        .order('user_code', { ascending: false })
+                        .limit(1);
+                    if (error || !data || data.length === 0) return '00001';
+                    const lastCode = data[0].user_code;
+                    const lastNum = parseInt(lastCode, 10) || 0;
+                    return String(lastNum + 1).padStart(5, '0');
+                };
+
                 const submitAddData = async () => {
                     if (!form.country || !form.time) {
                         ElMessage.warning('请至少填写【国家】和【跟进时间】！');
@@ -1240,18 +1253,18 @@
                         const time = formatDate(form.time);
                         const company = form.company.trim();
                         const clientName = form.clientName.trim();
-                        const userCode = form.userCode.trim();
                         const phone = form.phone.trim();
                         const source = form.source;
                         const status = form.status;
                         const remarks = form.remarks.trim();
 
                         if (editingId.value !== null) {
-                            const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, remarks };
+                            const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks };
                             const { error } = await supabase.from(TABLE_NAME).update(record).eq('id', editingId.value);
                             if (error) throw error;
                             ElMessage.success('修改成功！');
                         } else {
+                            const userCode = await generateUserCode();
                             const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, ord: '', remarks };
                             const { error } = await supabase.from(TABLE_NAME).insert([record]);
                             if (error) throw error;
@@ -1321,7 +1334,7 @@
                         if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source);
                         if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`);
                     }
-                    q = q.order('created_at', { ascending: false });
+                    q = q.order('user_code', { ascending: true });
                     const { data, error } = await q;
                     if (error) throw error;
                     return (data || []).map(mapFromDB);
