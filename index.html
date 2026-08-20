@@ -461,7 +461,24 @@
                         <span class="filter-label">来源筛选：</span>
                         <el-radio-group v-model="currentFilters.source" size="small">
                             <el-radio-button value="all" class="rb-all">全部</el-radio-button>
-                            <el-radio-button v-for="s in sourceList" :key="s" :value="s">{{ s }}</el-radio-button>
+                            <el-radio-button
+                                v-for="s in (isSourceExpanded ? sourceList : sourceList.slice(0, 5))"
+                                :key="s"
+                                :value="s"
+                            >{{ s }}</el-radio-button>
+                            <el-button
+                                v-if="sourceList.length > 5"
+                                size="small"
+                                text
+                                @click="isSourceExpanded = !isSourceExpanded"
+                                style="margin-left: 4px;"
+                            >
+                                {{ isSourceExpanded ? '收起' : '展开' }}
+                                <el-icon>
+                                    <arrow-down v-if="!isSourceExpanded"></arrow-down>
+                                    <arrow-up v-else></arrow-up>
+                                </el-icon>
+                            </el-button>
                         </el-radio-group>
                     </div>
                     <div class="filter-group" style="margin-left:auto;">
@@ -767,6 +784,7 @@
                 };
                 const SOURCE_TABLE_NAME = 'source_options';
                 const sourceList = ref([]);
+                const isSourceExpanded = ref(false);  // 来源筛选是否展开
                 const sourceLoading = ref(false);
                 const sourceDialogVisible = ref(false);
                 const sourceFormVisible = ref(false);
@@ -826,27 +844,36 @@
                 // ========== 来源选项管理 ==========
                 const fetchSourceOptions = async () => {
                     if (!supabase || !currentUser.value) return;
+                    
                     try {
-                        const { data: globalData, error: e1 } = await supabase
+                        // 使用 .or() 组合查询条件：
+                        // 1. is_global 为 true
+                        // 2. user_id 等于当前用户ID
+                        const { data, error } = await supabase
                             .from(SOURCE_TABLE_NAME)
-                            .select('*')
-                            .eq('is_global', true)
+                            .select('id, name, sort_order') // 建议只选取需要的字段，减少传输量
+                            .or(`is_global.eq.true,user_id.eq.${currentUser.value.id}`)
                             .order('sort_order', { ascending: true });
-                        const { data: userData, error: e2 } = await supabase
-                            .from(SOURCE_TABLE_NAME)
-                            .select('*')
-                            .eq('user_id', currentUser.value.id)
-                            .order('sort_order', { ascending: true });
-                        if (e1) throw e1;
-                        if (e2) throw e2;
-                        const globalItems = (globalData || []).map(r => ({ id: r.id, name: r.name, sortOrder: r.sort_order || 0, isGlobal: true }));
-                        const userItems = (userData || []).map(r => ({ id: r.id, name: r.name, sortOrder: r.sort_order || 0, isGlobal: false }));
-                        sourceOptions.value = [...globalItems, ...userItems];
-                        sourceList.value = sourceOptions.value.map(o => o.name);
+
+                        if (error) throw error;
+
+                        // 处理数据，标记来源类型
+                        const items = (data || []).map(r => ({
+                            id: r.id,
+                            name: r.name,
+                            sortOrder: r.sort_order || 0,
+                            // 根据原始数据判断是否为全局，保持逻辑一致性
+                            isGlobal: r.is_global === true 
+                        }));
+
+                        sourceOptions.value = items;
+                        sourceList.value = items.map(o => o.name);
+                        
                     } catch (err) {
                         LOG('SOURCE', '加载来源选项失败:', err);
                     }
                 };
+
 
                 const openSourceDialog = async () => {
                     sourceDialogVisible.value = true;
@@ -1560,7 +1587,7 @@
                     modalVisible, editingId, submitLoading, form,
                     statusText, statusTagType,
                     isMobile, pagerLayout,
-                    countryData, sourceList,
+                    countryData, sourceList, isSourceExpanded,
                     sourceDialogVisible, sourceFormVisible, sourceEditingId, sourceFormName, sourceOptions, sourceLoading,
                     toggleAuthMode, handleAuth, handleLogout,
                     openModal, showRemarkInfo, submitAddData, updateCountryCode,
