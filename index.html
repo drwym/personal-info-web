@@ -394,10 +394,10 @@
 <body>
     <div id="app" v-loading.fullscreen.lock="fullscreenLoading" element-loading-text="正在从云端加载数据...">
 
-        <!-- ========== 登录 / 注册 ========== -->
+        <!-- ========== 登录 ========== -->
         <el-dialog
             v-model="authDialogVisible"
-            :title="isLoginMode ? '登录' : '注册'"
+            title="登录"
             :width="isMobile ? '94vw' : '380px'"
             :close-on-click-modal="false"
             :close-on-press-escape="false"
@@ -412,21 +412,14 @@
                 </el-form-item>
                 <el-form-item>
                     <el-input v-model="authForm.password" placeholder="密码（至少6位）" type="password"
-                              :autocomplete="isLoginMode ? 'current-password' : 'new-password'" show-password></el-input>
-                </el-form-item>
-                <el-form-item v-if="!isLoginMode">
-                    <el-input v-model="authForm.displayName" placeholder="显示名称（可选）"></el-input>
+                              autocomplete="current-password" show-password></el-input>
                 </el-form-item>
                 <el-form-item>
                     <el-button type="primary" style="width:100%;" :loading="authLoading" @click="handleAuth">
-                        {{ isLoginMode ? '登录' : '注册' }}
+                        登录
                     </el-button>
                 </el-form-item>
             </el-form>
-            <div class="auth-toggle">
-                <span>{{ isLoginMode ? '还没有账号？' : '已有账号？' }}</span>
-                <a @click="toggleAuthMode">{{ isLoginMode ? '立即注册' : '去登录' }}</a>
-            </div>
         </el-dialog>
 
         <!-- ========== 主界面 ========== -->
@@ -811,9 +804,8 @@
                 const fullscreenLoading = ref(false);
                 const authDialogVisible = ref(false);
                 const authLoading = ref(false);
-                const isLoginMode = ref(true);
                 const authError = ref('');
-                const authForm = reactive({ email: '', password: '', displayName: '' });
+                const authForm = reactive({ email: '', password: '' });
 
                 const currentUser = ref(null);
                 const displayUsername = ref('--');
@@ -992,6 +984,7 @@
                     time: row.follow_time || '',
                     company: row.company || '',
                     clientName: row.client_name || '',
+                    userCode: row.user_code || '',
                     phone: row.phone || '',
                     source: row.source || '',
                     status: row.status || '潜在客户',
@@ -1000,13 +993,9 @@
                 });
 
                 // ========== 认证 ==========
-                const toggleAuthMode = () => {
-                    isLoginMode.value = !isLoginMode.value;
-                    authError.value = '';
-                };
                 const showAuthPage = () => {
-                    authForm.email = ''; authForm.password = ''; authForm.displayName = '';
-                    authError.value = ''; isLoginMode.value = true;
+                    authForm.email = ''; authForm.password = '';
+                    authError.value = '';
                     authDialogVisible.value = true;
                 };
                 const hideAuthPage = () => { authDialogVisible.value = false; };
@@ -1036,28 +1025,8 @@
                     if (password.length < 6) { authError.value = '密码至少6位'; return; }
                     authLoading.value = true;
                     try {
-                        if (isLoginMode.value) {
-                            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                            if (error) throw error;
-                        } else {
-                            const { data, error } = await supabase.auth.signUp({
-                                email, password,
-                                options: {
-                                    data: { display_name: displayName || email.split('@')[0] },
-                                    emailRedirectTo: window.location.href
-                                }
-                            });
-                            if (error) throw error;
-                            if (data.user && data.user.identities && data.user.identities.length === 0) {
-                                authError.value = '该邮箱已注册，请直接登录';
-                                return;
-                            }
-                            if (data.user && !data.session) {
-                                ElMessage.success('注册成功！请检查邮箱完成验证后再登录');
-                                isLoginMode.value = true;
-                                return;
-                            }
-                        }
+                        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                        if (error) throw error;
                     } catch (err) {
                         authError.value = err.message || '操作失败，请重试';
                     } finally {
@@ -1216,7 +1185,7 @@
                 const resetForm = () => {
                     form.country = ''; form.countryCode = '';
                     form.time = new Date().toISOString().split('T')[0];
-                    form.company = ''; form.clientName = ''; form.phone = '';
+                    form.company = ''; form.clientName = ''; form.userCode = ''; form.phone = '';
                     form.source = ''; form.status = '重点跟进'; form.remarks = '';
                 };
 
@@ -1238,6 +1207,7 @@
                             form.time = parseDateForInput(item.time);
                             form.company = item.company;
                             form.clientName = item.clientName;
+                            form.userCode = item.userCode || '';
                             form.phone = item.phone || '';
                             form.source = item.source;
                             form.status = item.status;
@@ -1270,18 +1240,19 @@
                         const time = formatDate(form.time);
                         const company = form.company.trim();
                         const clientName = form.clientName.trim();
+                        const userCode = form.userCode.trim();
                         const phone = form.phone.trim();
                         const source = form.source;
                         const status = form.status;
                         const remarks = form.remarks.trim();
 
                         if (editingId.value !== null) {
-                            const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks };
+                            const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, remarks };
                             const { error } = await supabase.from(TABLE_NAME).update(record).eq('id', editingId.value);
                             if (error) throw error;
                             ElMessage.success('修改成功！');
                         } else {
-                            const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, ord: '', remarks };
+                            const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, ord: '', remarks };
                             const { error } = await supabase.from(TABLE_NAME).insert([record]);
                             if (error) throw error;
                             ElMessage.success('添加成功！');
@@ -1597,7 +1568,7 @@
 
                 return {
                     tableRef,
-                    fullscreenLoading, authDialogVisible, authLoading, isLoginMode, authError, authForm,
+                    fullscreenLoading, authDialogVisible, authLoading, authError, authForm,
                     currentUser, displayUsername, clientData, pageData, currentFilters, selectedRows,
                     pagination, loadingPage, pageSizes, refreshing,
                     modalVisible, editingId, submitLoading, form,
@@ -1605,7 +1576,7 @@
                     isMobile, pagerLayout,
                     countryData, sourceList,
                     sourceDialogVisible, sourceFormVisible, sourceEditingId, sourceFormName, sourceOptions, sourceLoading,
-                    toggleAuthMode, handleAuth, handleLogout,
+                    handleAuth, handleLogout,
                     openModal, showRemarkInfo, submitAddData, updateCountryCode,
                     handleSelectionChange, batchDelete,
                     exportExcel, exportData, importData, refreshData,
