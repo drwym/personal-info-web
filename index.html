@@ -477,7 +477,15 @@
                             size="small"
                             style="width: 140px;"
                             clearable
-                        ></el-input>
+                            @keyup.enter="searchUserCode"
+                            @clear="searchUserCode"
+                        >
+                            <template #append>
+                                <el-button @click="searchUserCode">
+                                    <el-icon><Search></Search></el-icon>
+                                </el-button>
+                            </template>
+                        </el-input>
                     </div>
                     <div class="filter-group" style="margin-left:auto;">
                         <el-button type="warning" plain @click="openSourceDialog">
@@ -1341,10 +1349,16 @@
                 };
 
                 // ========== 筛选（切换时回到第一页） ==========
-                watch(currentFilters, () => {
+                // 状态、来源：实时过滤
+                watch(() => [currentFilters.status, currentFilters.source], () => {
                     pagination.currentPage = 1;
                     fetchPage();
                 });
+                // 用户编码：仅手动触发（回车 / 搜索按钮 / 清空按钮）
+                const searchUserCode = () => {
+                    pagination.currentPage = 1;
+                    fetchPage();
+                };
 
                 // 序号列（跨页连续）
                 const indexMethod = (index) => {
@@ -1621,7 +1635,7 @@
                     openModal, showRemarkInfo, submitAddData, updateCountryCode,
                     handleSelectionChange, batchDelete,
                     exportExcel, exportData, importData, refreshData,
-                    fetchPage, handleCurrentChange, handleSizeChange,
+                    fetchPage, handleCurrentChange, handleSizeChange, searchUserCode,
                     getCountryClass, indexMethod,
                     openSourceDialog, openSourceForm, submitSourceForm, deleteSourceOption
                 };
