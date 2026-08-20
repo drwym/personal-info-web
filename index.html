@@ -500,7 +500,7 @@
             >
                 <el-form :model="form" label-width="90px" label-position="right">
                     <el-form-item label="用户编码">
-                        <el-input v-model="form.userCode" placeholder="输入用户编码" ></el-input>
+                        <el-input v-model="form.userCode" :disabled="true" :placeholder="editingId === null ? '自动生成' : ''"></el-input>
                     </el-form-item>
                     <el-form-item label="国家" required>
                         <div style="display:flex;gap:10px;width:100%;">
@@ -642,10 +642,10 @@
                         <el-table-column type="selection" :width="isMobile ? 38 : 50" align="center"></el-table-column>
                         <!-- 2. 序号（按当前分页连续编号） -->
                         <el-table-column type="index" label="序号" :width="isMobile ? 44 : 60" align="center" header-align="center" :index="indexMethod"></el-table-column>
-                        <!-- 6.5 用户编码 -->
-                        <el-table-column label="用户编码" prop="user_code" :min-width="isMobile ? 80 : 110" align="center" header-align="center" show-overflow-tooltip>
+                        <!-- 3. 用户编码 -->
+                        <el-table-column label="用户编码" prop="userCode" :min-width="isMobile ? 80 : 110" align="center" header-align="center" show-overflow-tooltip>
                             <template #default="{ row }">
-                                <span v-if="row.user_code">{{ row.user_code }}</span>
+                                <span v-if="row.userCode">{{ row.userCode }}</span>
                                 <span v-else style="color:#c0c4cc;">-</span>
                             </template>
                         </el-table-column>
@@ -830,7 +830,7 @@
                 const submitLoading = ref(false);
                 const form = reactive({
                     country: '', countryCode: '', time: '', company: '',
-                    clientName: '', phone: '', source: '', status: '重点跟进', remarks: ''
+                    clientName: '', userCode: '', phone: '', source: '', status: '重点跟进', remarks: ''
                 });
 
                 const statusText = ref('连接中...');
@@ -1185,7 +1185,7 @@
                 const resetForm = () => {
                     form.country = ''; form.countryCode = '';
                     form.time = new Date().toISOString().split('T')[0];
-                    form.company = ''; form.clientName = ''; form.phone = '';
+                    form.company = ''; form.clientName = ''; form.userCode = ''; form.phone = '';
                     form.source = ''; form.status = '重点跟进'; form.remarks = '';
                 };
 
@@ -1207,6 +1207,7 @@
                             form.time = parseDateForInput(item.time);
                             form.company = item.company;
                             form.clientName = item.clientName;
+                            form.userCode = item.userCode || '';
                             form.phone = item.phone || '';
                             form.source = item.source;
                             form.status = item.status;
