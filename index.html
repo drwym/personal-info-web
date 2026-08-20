@@ -543,6 +543,9 @@
                             <el-option label="☆下单完成" value="下单完成" ></el-option>
                         </el-select>
                     </el-form-item>
+                    <el-form-item label="下单">
+                        <el-checkbox v-model="form.isOrdered">已下单</el-checkbox>
+                    </el-form-item>
                     <el-form-item label="备注">
                         <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="备注信息" ></el-input>
                     </el-form-item>
@@ -674,9 +677,9 @@
                             </template>
                         </el-table-column>
                         <!-- 9. 下单 -->
-                        <el-table-column label="下单" prop="order" :width="isMobile ? 60 : 80" align="center" header-align="center">
+                        <el-table-column label="下单" prop="ord" :width="isMobile ? 60 : 80" align="center" header-align="center">
                             <template #default="{ row }">
-                                <span v-if="row.order">{{ row.order }}</span>
+                                <span v-if="row.ord" style="color:#67c23a;">已下单</span>
                                 <span v-else style="color:#c0c4cc;">-</span>
                             </template>
                         </el-table-column>
@@ -828,9 +831,10 @@
                 const modalVisible = ref(false);
                 const editingId = ref(null);
                 const submitLoading = ref(false);
+                const originalStatus = ref(''); // 保存原始状态，用于取消勾选时恢复
                 const form = reactive({
                     country: '', countryCode: '', time: '', company: '',
-                    clientName: '', userCode: '', phone: '', source: '', status: '重点跟进', remarks: ''
+                    clientName: '', userCode: '', phone: '', source: '', status: '重点跟进', remarks: '', isOrdered: false
                 });
 
                 const statusText = ref('连接中...');
@@ -846,6 +850,23 @@
                 const updateCountryCode = () => {
                     form.countryCode = countryData[form.country] || '';
                 };
+
+                // 监听下单checkbox变化
+                watch(() => form.isOrdered, (newValue, oldValue) => {
+                    if (newValue) {
+                        // 勾选时保存当前状态，然后设置为"下单完成"
+                        if (form.status !== '下单完成') {
+                            originalStatus.value = form.status;
+                            form.status = '下单完成';
+                        }
+                    } else {
+                        // 取消勾选时恢复到原始状态
+                        if (originalStatus.value) {
+                            form.status = originalStatus.value;
+                            originalStatus.value = '';
+                        }
+                    }
+                });
 
                 // ========== 来源选项管理 ==========
                 const fetchSourceOptions = async () => {
@@ -988,7 +1009,7 @@
                     phone: row.phone || '',
                     source: row.source || '',
                     status: row.status || '潜在客户',
-                    order: row.ord || '',
+                    ord: row.ord || '',
                     remarks: row.remarks || ''
                 });
 
@@ -1186,7 +1207,8 @@
                     form.country = ''; form.countryCode = '';
                     form.time = new Date().toISOString().split('T')[0];
                     form.company = ''; form.clientName = ''; form.userCode = ''; form.phone = '';
-                    form.source = ''; form.status = '重点跟进'; form.remarks = '';
+                    form.source = ''; form.status = '重点跟进'; form.remarks = ''; form.isOrdered = false;
+                    originalStatus.value = '';
                 };
 
                 const openModal = async (id = null) => {
@@ -1212,6 +1234,11 @@
                             form.source = item.source;
                             form.status = item.status;
                             form.remarks = item.remarks;
+                            // 根据ord字段判断是否已下单
+                            const isOrdered = !!(item.ord && item.ord.trim() !== '');
+                            form.isOrdered = isOrdered;
+                            // 保存原始状态，用于取消勾选时恢复
+                            originalStatus.value = isOrdered ? '' : item.status;
                         }
                     } else {
                         resetForm();
@@ -1260,13 +1287,13 @@
                         const remarks = form.remarks.trim();
 
                         if (editingId.value !== null) {
-                            const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks };
+                            const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks, ord: form.isOrdered ? '已下单' : '' };
                             const { error } = await supabase.from(TABLE_NAME).update(record).eq('id', editingId.value);
                             if (error) throw error;
                             ElMessage.success('修改成功！');
                         } else {
                             const userCode = await generateUserCode();
-                            const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, ord: '', remarks };
+                            const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, ord: form.isOrdered ? '已下单' : '', remarks };
                             const { error } = await supabase.from(TABLE_NAME).insert([record]);
                             if (error) throw error;
                             ElMessage.success('添加成功！');
@@ -1349,7 +1376,7 @@
                         if (all.length === 0) { ElMessage.warning('当前筛选条件下没有数据！'); return; }
                         const excelRows = [["序号","国家","区号","跟进时间","公司","客户名","用户编码","联系方式","来源","状态","下单","备注"]];
                         all.forEach((item, index) => {
-                            excelRows.push([index+1, item.country, item.countryCode||'', item.time, item.company, item.clientName, item.user_code||'', item.phone||'', item.source||'', item.status, item.order||'', item.remarks]);
+                            excelRows.push([index+1, item.country, item.countryCode||'', item.time, item.company, item.clientName, item.user_code||'', item.phone||'', item.source||'', item.status, item.ord||'', item.remarks]);
                         });
                         const wb = XLSX.utils.book_new();
                         const ws = XLSX.utils.aoa_to_sheet(excelRows);
@@ -1373,7 +1400,7 @@
                         const payload = all.map(item => ({
                             country: item.country, countryCode: item.countryCode, time: item.time,
                             company: item.company, clientName: item.clientName, userCode: item.user_code,
-                            phone: item.phone, source: item.source, status: item.status, order: item.order, remarks: item.remarks
+                            phone: item.phone, source: item.source, status: item.status, ord: item.ord, remarks: item.remarks
                         }));
                         const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
                         const url = URL.createObjectURL(blob);
@@ -1415,7 +1442,7 @@
                                 follow_time: item.time||'', company: item.company||'',
                                 client_name: item.clientName||'', user_code: item.userCode||'',
                                 phone: item.phone||'', source: item.source||'', status: item.status||'潜在客户',
-                                ord: item.order||'', remarks: item.remarks||''
+                                ord: item.ord||'', remarks: item.remarks||''
                             }));
                             const { error } = await supabase.from(TABLE_NAME).insert(records);
                             if (error) throw error;
