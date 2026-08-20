@@ -465,6 +465,9 @@
                         </el-radio-group>
                     </div>
                     <div class="filter-group" style="margin-left:auto;">
+                        <el-button type="warning" plain @click="openSourceDialog">
+                            <el-icon><Setting></Setting></el-icon> 管理来源
+                        </el-button>
                         <el-button type="primary" :loading="refreshing" @click="refreshData()">
                             <el-icon><Refresh></Refresh></el-icon> 刷新数据
                         </el-button>
@@ -530,6 +533,69 @@
                     <el-button @click="modalVisible = false">取消</el-button>
                     <el-button type="primary" :loading="submitLoading" @click="submitAddData">
                         {{ editingId === null ? '确认添加' : '保存修改' }}
+                    </el-button>
+                </template>
+            </el-dialog>
+
+            <!-- 来源选项管理弹窗 -->
+            <el-dialog
+                v-model="sourceDialogVisible"
+                title="来源选项管理"
+                :width="isMobile ? '94vw' : '480px'"
+                :close-on-click-modal="false"
+                align-center
+            >
+                <div style="margin-bottom:12px;display:flex;gap:10px;align-items:center;">
+                    <el-button type="success" @click="openSourceForm()">
+                        <el-icon><Plus></Plus></el-icon> 添加来源
+                    </el-button>
+                    <span style="font-size:12px;color:#909399;">共 {{ sourceOptions.length }} 个来源选项</span>
+                </div>
+                <el-table
+                    v-loading="sourceLoading"
+                    :data="sourceOptions"
+                    stripe
+                    border
+                    size="small"
+                    style="width:100%;"
+                    empty-text="暂无来源选项"
+                >
+                    <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+                    <el-table-column label="来源名称" prop="name" align="center"></el-table-column>
+                    <el-table-column label="操作" width="140" align="center">
+                        <template #default="{ row }">
+                            <el-button link type="primary" size="small" @click="openSourceForm(row)">
+                                <el-icon><Edit></Edit></el-icon> 编辑
+                            </el-button>
+                            <el-button link type="danger" size="small" @click="deleteSourceOption(row)">
+                                <el-icon><Delete></Delete></el-icon> 删除
+                            </el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+                <template #footer>
+                    <el-button @click="sourceDialogVisible = false">关闭</el-button>
+                </template>
+            </el-dialog>
+
+            <!-- 来源添加/编辑弹窗 -->
+            <el-dialog
+                v-model="sourceFormVisible"
+                :title="sourceEditingId === null ? '添加来源' : '编辑来源'"
+                :width="isMobile ? '94vw' : '360px'"
+                :close-on-click-modal="false"
+                append-to-body
+                align-center
+            >
+                <el-form label-width="80px" label-position="right">
+                    <el-form-item label="来源名称">
+                        <el-input v-model="sourceFormName" placeholder="请输入来源名称" maxlength="30" show-word-limit></el-input>
+                    </el-form-item>
+                </el-form>
+                <template #footer>
+                    <el-button @click="sourceFormVisible = false">取消</el-button>
+                    <el-button type="primary" :loading="sourceLoading" @click="submitSourceForm">
+                        {{ sourceEditingId === null ? '确认添加' : '保存修改' }}
                     </el-button>
                 </template>
             </el-dialog>
@@ -694,7 +760,14 @@
                     "巴西": "+55", "墨西哥": "+52", "阿根廷": "+54", "智利": "+56", "哥伦比亚": "+57",
                     "厄瓜多尔": "+593", "秘鲁": "+51", "阿尔及利亚": "+213", "摩洛哥": "+212"
                 };
-                const sourceList = ["ins", "facebook", "whatsapp", "展会", "主动找我"];
+                const SOURCE_TABLE_NAME = 'source_options';
+                const sourceList = ref([]);
+                const sourceLoading = ref(false);
+                const sourceDialogVisible = ref(false);
+                const sourceFormVisible = ref(false);
+                const sourceEditingId = ref(null);
+                const sourceFormName = ref('');
+                const sourceOptions = ref([]);
 
                 // ========== 状态 ==========
                 const tableRef = ref(null);
@@ -743,6 +816,99 @@
                 };
                 const updateCountryCode = () => {
                     form.countryCode = countryData[form.country] || '';
+                };
+
+                // ========== 来源选项管理 ==========
+                const fetchSourceOptions = async () => {
+                    if (!supabase || !currentUser.value) return;
+                    try {
+                        const { data, error } = await supabase
+                            .from(SOURCE_TABLE_NAME)
+                            .select('*')
+                            .eq('user_id', currentUser.value.id)
+                            .order('sort_order', { ascending: true });
+                        if (error) throw error;
+                        sourceOptions.value = (data || []).map(r => ({ id: r.id, name: r.name, sortOrder: r.sort_order || 0 }));
+                        sourceList.value = sourceOptions.value.map(o => o.name);
+                    } catch (err) {
+                        LOG('SOURCE', '加载来源选项失败:', err);
+                    }
+                };
+
+                const openSourceDialog = async () => {
+                    sourceDialogVisible.value = true;
+                    sourceFormVisible.value = false;
+                    sourceEditingId.value = null;
+                    sourceFormName.value = '';
+                    await fetchSourceOptions();
+                };
+
+                const openSourceForm = (item = null) => {
+                    if (item) {
+                        sourceEditingId.value = item.id;
+                        sourceFormName.value = item.name;
+                    } else {
+                        sourceEditingId.value = null;
+                        sourceFormName.value = '';
+                    }
+                    sourceFormVisible.value = true;
+                };
+
+                const submitSourceForm = async () => {
+                    const name = sourceFormName.value.trim();
+                    if (!name) { ElMessage.warning('请输入来源名称'); return; }
+                    if (!sourceEditingId.value && sourceOptions.value.some(o => o.name === name)) {
+                        ElMessage.warning('该来源已存在'); return;
+                    }
+                    sourceLoading.value = true;
+                    try {
+                        if (sourceEditingId.value) {
+                            const { error } = await supabase
+                                .from(SOURCE_TABLE_NAME)
+                                .update({ name })
+                                .eq('id', sourceEditingId.value);
+                            if (error) throw error;
+                            ElMessage.success('修改来源成功');
+                        } else {
+                            const maxSort = sourceOptions.value.length > 0
+                                ? Math.max(...sourceOptions.value.map(o => o.sortOrder)) + 1 : 1;
+                            const { error } = await supabase
+                                .from(SOURCE_TABLE_NAME)
+                                .insert([{ user_id: currentUser.value.id, name, sort_order: maxSort }]);
+                            if (error) throw error;
+                            ElMessage.success('添加来源成功');
+                        }
+                        sourceFormVisible.value = false;
+                        sourceEditingId.value = null;
+                        sourceFormName.value = '';
+                        await fetchSourceOptions();
+                    } catch (err) {
+                        ElMessage.error('操作失败: ' + (err.message || err));
+                    } finally {
+                        sourceLoading.value = false;
+                    }
+                };
+
+                const deleteSourceOption = async (item) => {
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定要删除来源「${item.name}」吗？`,
+                            '删除确认',
+                            { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+                        );
+                        sourceLoading.value = true;
+                        const { error } = await supabase
+                            .from(SOURCE_TABLE_NAME)
+                            .delete()
+                            .eq('id', item.id);
+                        if (error) throw error;
+                        ElMessage.success('删除成功');
+                        await fetchSourceOptions();
+                    } catch (err) {
+                        if (err !== 'cancel') ElMessage.error('删除失败: ' + (err.message || err));
+                    } finally {
+                        sourceLoading.value = false;
+                    }
                 };
 
                 const setStatus = (type, text) => {
@@ -968,6 +1134,7 @@
                     if (silent && !fullscreenLoading.value) fullscreenLoading.value = true;
                     try {
                         pagination.currentPage = 1;
+                        await fetchSourceOptions();
                         const ok = await fetchPage();
                         if (ok && !silent) ElMessage.success('数据已刷新');
                         LOG('REFRESH', 'refreshData 完成 ok=', ok);
@@ -1381,12 +1548,14 @@
                     statusText, statusTagType,
                     isMobile, pagerLayout,
                     countryData, sourceList,
+                    sourceDialogVisible, sourceFormVisible, sourceEditingId, sourceFormName, sourceOptions, sourceLoading,
                     toggleAuthMode, handleAuth, handleLogout,
                     openModal, showRemarkInfo, submitAddData, updateCountryCode,
                     handleSelectionChange, batchDelete,
                     exportExcel, exportData, importData, refreshData,
                     fetchPage, handleCurrentChange, handleSizeChange,
-                    getCountryClass, indexMethod
+                    getCountryClass, indexMethod,
+                    openSourceDialog, openSourceForm, submitSourceForm, deleteSourceOption
                 };
             }
         });
