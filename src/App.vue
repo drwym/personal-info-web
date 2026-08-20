@@ -23,6 +23,7 @@
       <FilterBar
         :current-filters="currentFilters"
         :source-list="sourceList"
+        :country-list="countryList"
         :refreshing="refreshing"
         @update:current-filters="Object.assign(currentFilters, $event)"
         @search-user-code="searchUserCode"
@@ -232,7 +233,8 @@ const deleteSourceOption = async (item) => {
 
 // ========== 数据加载（服务端分页） ==========
 const pageData = ref([])
-const currentFilters = reactive({ status: 'all', source: 'all', userCode: '' })
+const currentFilters = reactive({ status: 'all', source: 'all', country: 'all', userCode: '' })
+const countryList = computed(() => Object.keys(countryData))
 const pagination = reactive({
   currentPage: 1,
   pageSize: isMobile.value ? 10 : 20,
@@ -262,6 +264,7 @@ const buildQuery = () => {
     .eq('user_id', currentUser.value.id)
   if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status)
   if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source)
+  if (currentFilters.country !== 'all') q = q.eq('country', currentFilters.country)
   if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`)
   q = q.order('user_code', { ascending: true })
   return q
@@ -504,7 +507,7 @@ const batchDelete = async () => {
 
 // ========== 筛选 ==========
 // 状态、来源：实时过滤
-watch(() => [currentFilters.status, currentFilters.source], () => {
+watch(() => [currentFilters.status, currentFilters.source, currentFilters.country], () => {
   pagination.currentPage = 1
   fetchPage()
 })
@@ -520,6 +523,7 @@ const fetchAll = async (applyFilters = false) => {
   if (applyFilters) {
     if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status)
     if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source)
+    if (currentFilters.country !== 'all') q = q.eq('country', currentFilters.country)
     if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`)
   }
   q = q.order('user_code', { ascending: true })

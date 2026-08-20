@@ -30,6 +30,25 @@
         </el-select>
       </div>
       <div class="filter-group">
+        <span class="filter-label">国家筛选：</span>
+        <el-select
+          v-model="localCountry"
+          placeholder="选择国家"
+          size="small"
+          style="width: 160px;"
+          filterable
+          clearable
+        >
+          <el-option value="all" label="全部国家"></el-option>
+          <el-option
+            v-for="c in countryList"
+            :key="c"
+            :label="c"
+            :value="c"
+          ></el-option>
+        </el-select>
+      </div>
+      <div class="filter-group">
         <span class="filter-label">用户编码：</span>
         <el-input
           v-model="localUserCode"
@@ -65,6 +84,7 @@ import { computed } from 'vue'
 const props = defineProps({
   currentFilters: Object,
   sourceList: Array,
+  countryList: Array,
   refreshing: Boolean
 })
 
@@ -78,6 +98,11 @@ const localStatus = computed({
 const localSource = computed({
   get: () => props.currentFilters.source,
   set: (val) => emit('update:currentFilters', { ...props.currentFilters, source: val })
+})
+
+const localCountry = computed({
+  get: () => props.currentFilters.country,
+  set: (val) => emit('update:currentFilters', { ...props.currentFilters, country: val })
 })
 
 const localUserCode = computed({
