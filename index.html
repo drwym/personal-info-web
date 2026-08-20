@@ -459,27 +459,22 @@
                     </div>
                     <div class="filter-group">
                         <span class="filter-label">来源筛选：</span>
-                        <el-radio-group v-model="currentFilters.source" size="small">
-                            <el-radio-button value="all" class="rb-all">全部</el-radio-button>
-                            <el-radio-button
-                                v-for="s in (isSourceExpanded ? sourceList : sourceList.slice(0, 5))"
+                        <el-select
+                            v-model="currentFilters.source"
+                            placeholder="选择来源"
+                            size="small"
+                            style="width: 160px;"
+                            filterable
+                            clearable
+                        >
+                            <el-option value="all" label="全部来源"></el-option>
+                            <el-option
+                                v-for="s in sourceList"
                                 :key="s"
+                                :label="s"
                                 :value="s"
-                            >{{ s }}</el-radio-button>
-                            <el-button
-                                v-if="sourceList.length > 5"
-                                size="small"
-                                text
-                                @click="isSourceExpanded = !isSourceExpanded"
-                                style="margin-left: 4px;"
-                            >
-                                {{ isSourceExpanded ? '收起' : '展开' }}
-                                <el-icon>
-                                    <arrow-down v-if="!isSourceExpanded"></arrow-down>
-                                    <arrow-up v-else></arrow-up>
-                                </el-icon>
-                            </el-button>
-                        </el-radio-group>
+                            ></el-option>
+                        </el-select>
                     </div>
                     <div class="filter-group" style="margin-left:auto;">
                         <el-button type="warning" plain @click="openSourceDialog">
@@ -784,7 +779,6 @@
                 };
                 const SOURCE_TABLE_NAME = 'source_options';
                 const sourceList = ref([]);
-                const isSourceExpanded = ref(false);  // 来源筛选是否展开
                 const sourceLoading = ref(false);
                 const sourceDialogVisible = ref(false);
                 const sourceFormVisible = ref(false);
@@ -1587,7 +1581,7 @@
                     modalVisible, editingId, submitLoading, form,
                     statusText, statusTagType,
                     isMobile, pagerLayout,
-                    countryData, sourceList, isSourceExpanded,
+                    countryData, sourceList,
                     sourceDialogVisible, sourceFormVisible, sourceEditingId, sourceFormName, sourceOptions, sourceLoading,
                     toggleAuthMode, handleAuth, handleLogout,
                     openModal, showRemarkInfo, submitAddData, updateCountryCode,
