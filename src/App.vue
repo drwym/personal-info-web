@@ -12,7 +12,7 @@
     />
 
     <!-- 主界面 -->
-    <div v-if="currentUser">
+    <div v-if="currentUser && !showHolidayCalendar">
       <PageHeader
         :status-text="statusText"
         :status-tag-type="statusTagType"
@@ -29,6 +29,7 @@
         @search-user-code="searchUserCode"
         @manage-sources="openSourceDialog"
         @refresh="refreshData()"
+        @show-holidays="showHolidayCalendar = true"
       />
 
       <ClientTable
@@ -91,6 +92,11 @@
         @update:name="sourceFormName = $event"
       />
     </div>
+
+    <!-- 各国节日日历视图 -->
+    <div v-if="showHolidayCalendar && currentUser">
+      <HolidayCalendar @back="showHolidayCalendar = false" />
+    </div>
   </div>
 </template>
 
@@ -109,6 +115,7 @@ import ActionBar from './components/ActionBar.vue'
 import EditDialog from './components/EditDialog.vue'
 import SourceManageDialog from './components/SourceManageDialog.vue'
 import SourceFormDialog from './components/SourceFormDialog.vue'
+import HolidayCalendar from './components/HolidayCalendar.vue'
 
 // ========== Composables ==========
 const {
@@ -126,6 +133,7 @@ const {
 } = useResponsive()
 
 // ========== 状态 ==========
+const showHolidayCalendar = ref(false)
 const statusText = ref('连接中...')
 const statusTagType = ref('info')
 
