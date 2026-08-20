@@ -1,0 +1,87 @@
+<template>
+  <el-card class="filter-card" shadow="never">
+    <div class="filter-row">
+      <div class="filter-group">
+        <span class="filter-label">状态筛选：</span>
+        <el-radio-group v-model="localStatus" size="small">
+          <el-radio-button value="all" class="rb-all">全部</el-radio-button>
+          <el-radio-button value="潜在客户" class="rb-primary">☆潜在客户</el-radio-button>
+          <el-radio-button value="重点跟进" class="rb-danger">☆重点跟进</el-radio-button>
+          <el-radio-button value="下单完成" class="rb-success">☆下单完成</el-radio-button>
+        </el-radio-group>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">来源筛选：</span>
+        <el-select
+          v-model="localSource"
+          placeholder="选择来源"
+          size="small"
+          style="width: 160px;"
+          filterable
+          clearable
+        >
+          <el-option value="all" label="全部来源"></el-option>
+          <el-option
+            v-for="s in sourceList"
+            :key="s"
+            :label="s"
+            :value="s"
+          ></el-option>
+        </el-select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">用户编码：</span>
+        <el-input
+          v-model="localUserCode"
+          placeholder="输入用户编码"
+          size="small"
+          style="width: 140px;"
+          clearable
+          @keyup.enter="$emit('search-user-code')"
+          @clear="$emit('search-user-code')"
+        >
+          <template #append>
+            <el-button size="small" @click="$emit('search-user-code')">
+              <el-icon><Search /></el-icon>
+            </el-button>
+          </template>
+        </el-input>
+      </div>
+      <div class="filter-group" style="margin-left:auto;">
+        <el-button type="warning" plain @click="$emit('manage-sources')">
+          <el-icon><Setting /></el-icon> 管理来源
+        </el-button>
+        <el-button type="primary" :loading="refreshing" @click="$emit('refresh')">
+          <el-icon><Refresh /></el-icon> 刷新数据
+        </el-button>
+      </div>
+    </div>
+  </el-card>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+
+const props = defineProps({
+  currentFilters: Object,
+  sourceList: Array,
+  refreshing: Boolean
+})
+
+const emit = defineEmits(['update:currentFilters', 'search-user-code', 'manage-sources', 'refresh'])
+
+const localStatus = computed({
+  get: () => props.currentFilters.status,
+  set: (val) => emit('update:currentFilters', { ...props.currentFilters, status: val })
+})
+
+const localSource = computed({
+  get: () => props.currentFilters.source,
+  set: (val) => emit('update:currentFilters', { ...props.currentFilters, source: val })
+})
+
+const localUserCode = computed({
+  get: () => props.currentFilters.userCode,
+  set: (val) => emit('update:currentFilters', { ...props.currentFilters, userCode: val })
+})
+</script>
