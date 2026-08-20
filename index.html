@@ -476,6 +476,16 @@
                             ></el-option>
                         </el-select>
                     </div>
+                    <div class="filter-group">
+                        <span class="filter-label">用户编码：</span>
+                        <el-input
+                            v-model="currentFilters.userCode"
+                            placeholder="输入用户编码"
+                            size="small"
+                            style="width: 140px;"
+                            clearable
+                        ></el-input>
+                    </div>
                     <div class="filter-group" style="margin-left:auto;">
                         <el-button type="warning" plain @click="openSourceDialog">
                             <el-icon><Setting></Setting></el-icon> 管理来源
@@ -496,6 +506,9 @@
                 align-center
             >
                 <el-form :model="form" label-width="90px" label-position="right">
+                    <el-form-item label="用户编码">
+                        <el-input v-model="form.userCode" placeholder="输入用户编码" ></el-input>
+                    </el-form-item>
                     <el-form-item label="国家" required>
                         <div style="display:flex;gap:10px;width:100%;">
                             <el-select
@@ -636,6 +649,13 @@
                         <el-table-column type="selection" :width="isMobile ? 38 : 50" align="center"></el-table-column>
                         <!-- 2. 序号（按当前分页连续编号） -->
                         <el-table-column type="index" label="序号" :width="isMobile ? 44 : 60" align="center" header-align="center" :index="indexMethod"></el-table-column>
+                        <!-- 6.5 用户编码 -->
+                        <el-table-column label="用户编码" prop="user_code" :min-width="isMobile ? 80 : 110" align="center" header-align="center" show-overflow-tooltip>
+                            <template #default="{ row }">
+                                <span v-if="row.user_code">{{ row.user_code }}</span>
+                                <span v-else style="color:#c0c4cc;">-</span>
+                            </template>
+                        </el-table-column>
                         <!-- 3. 国家 (区号) -->
                         <el-table-column label="国家" prop="country" :min-width="isMobile ? 80 : 110" align="center" class-name="col-country" header-align="center">
                             <template #default="{ row }">
@@ -800,7 +820,7 @@
 
                 const clientData = ref([]);
                 const pageData = ref([]);
-                const currentFilters = reactive({ status: 'all', source: 'all' });
+                const currentFilters = reactive({ status: 'all', source: 'all', userCode: '' });
                 // 移动端默认每页 10 条，PC 20 条（用 matchMedia 更可靠）
                 const mqMobile = window.matchMedia ? window.matchMedia('(max-width: 768px)') : null;
                 const isMobile = ref(mqMobile ? mqMobile.matches : window.innerWidth <= 768);
@@ -818,7 +838,7 @@
                 const submitLoading = ref(false);
                 const form = reactive({
                     country: '', countryCode: '', time: '', company: '',
-                    clientName: '', phone: '', source: '', status: '重点跟进', remarks: ''
+                    clientName: '', phone: '', source: '', status: '重点跟进', remarks: '', userCode: ''
                 });
 
                 const statusText = ref('连接中...');
@@ -1093,7 +1113,8 @@
                         .eq('user_id', currentUser.value.id);
                     if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status);
                     if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source);
-                    q = q.order('id', { ascending: true });
+                    if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`);
+                    q = q.order('created_at', { ascending: false });
                     return q;
                 };
 
@@ -1327,8 +1348,9 @@
                     if (applyFilters) {
                         if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status);
                         if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source);
+                        if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`);
                     }
-                    q = q.order('id', { ascending: true });
+                    q = q.order('created_at', { ascending: false });
                     const { data, error } = await q;
                     if (error) throw error;
                     return (data || []).map(mapFromDB);
@@ -1340,13 +1362,13 @@
                     try {
                         const all = await fetchAll(true);
                         if (all.length === 0) { ElMessage.warning('当前筛选条件下没有数据！'); return; }
-                        const excelRows = [["序号","国家","区号","跟进时间","公司","客户名","联系方式","来源","状态","下单","备注"]];
+                        const excelRows = [["序号","国家","区号","跟进时间","公司","客户名","用户编码","联系方式","来源","状态","下单","备注"]];
                         all.forEach((item, index) => {
-                            excelRows.push([index+1, item.country, item.countryCode||'', item.time, item.company, item.clientName, item.phone||'', item.source||'', item.status, item.order||'', item.remarks]);
+                            excelRows.push([index+1, item.country, item.countryCode||'', item.time, item.company, item.clientName, item.user_code||'', item.phone||'', item.source||'', item.status, item.order||'', item.remarks]);
                         });
                         const wb = XLSX.utils.book_new();
                         const ws = XLSX.utils.aoa_to_sheet(excelRows);
-                        ws['!cols'] = [{wch:6},{wch:12},{wch:8},{wch:16},{wch:18},{wch:12},{wch:16},{wch:10},{wch:12},{wch:8},{wch:30}];
+                        ws['!cols'] = [{wch:6},{wch:12},{wch:8},{wch:16},{wch:18},{wch:12},{wch:12},{wch:16},{wch:10},{wch:12},{wch:8},{wch:30}];
                         XLSX.utils.book_append_sheet(wb, ws, "客户数据");
                         XLSX.writeFile(wb, `客户信息表_${new Date().toISOString().split('T')[0]}.xlsx`);
                         ElMessage.success('Excel 导出成功！');
@@ -1365,8 +1387,8 @@
                         if (all.length === 0) { ElMessage.warning('当前没有数据可以备份！'); return; }
                         const payload = all.map(item => ({
                             country: item.country, countryCode: item.countryCode, time: item.time,
-                            company: item.company, clientName: item.clientName, phone: item.phone,
-                            source: item.source, status: item.status, order: item.order, remarks: item.remarks
+                            company: item.company, clientName: item.clientName, userCode: item.user_code,
+                            phone: item.phone, source: item.source, status: item.status, order: item.order, remarks: item.remarks
                         }));
                         const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
                         const url = URL.createObjectURL(blob);
@@ -1406,8 +1428,8 @@
                                 user_id: currentUser.value.id,
                                 country: item.country||'', country_code: item.countryCode||'',
                                 follow_time: item.time||'', company: item.company||'',
-                                client_name: item.clientName||'', phone: item.phone||'',
-                                source: item.source||'', status: item.status||'潜在客户',
+                                client_name: item.clientName||'', user_code: item.userCode||'',
+                                phone: item.phone||'', source: item.source||'', status: item.status||'潜在客户',
                                 ord: item.order||'', remarks: item.remarks||''
                             }));
                             const { error } = await supabase.from(TABLE_NAME).insert(records);
