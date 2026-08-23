@@ -63,6 +63,13 @@ const menuItems = [
     desc: '管理客户来源选项',
     icon: 'Setting',
     color: '#e6a23c'
+  },
+  {
+    path: '/price',
+    title: '启迅价格表',
+    desc: '查看启迅科技产品价格',
+    icon: 'PriceTag',
+    color: '#f56c6c'
   }
 ]
 </script>
