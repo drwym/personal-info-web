@@ -46,7 +46,10 @@
             @click="exportExcel"
             style="margin-left: auto"
           >
-            导出 Excel
+            <template v-if="exporting && exportProgress.total > 0">
+              下载图片 {{ exportProgress.loaded }}/{{ exportProgress.total }}
+            </template>
+            <template v-else>导出 Excel</template>
           </el-button>
         </div>
       </div>
@@ -140,7 +143,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Search, Picture, Loading } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { supabase, PRICE_TABLE_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
 import PageHeader from '../components/PageHeader.vue'
@@ -276,6 +279,7 @@ const tableRowClassName = () => 'price-table-row'
 
 // ========== 导出 Excel ==========
 const exporting = ref(false)
+const exportProgress = ref({ loaded: 0, total: 0 })
 
 const fetchAllData = async () => {
   let q = supabase.from(PRICE_TABLE_NAME).select('*')
@@ -288,12 +292,25 @@ const fetchAllData = async () => {
   return (data || []).map(mapFromDB)
 }
 
+/** 从 URL 获取图片 ArrayBuffer，失败返回 null */
+const fetchImageBuffer = async (url) => {
+  if (!url) return null
+  try {
+    const resp = await fetch(url, { mode: 'cors' })
+    if (!resp.ok) return null
+    return await resp.arrayBuffer()
+  } catch {
+    return null
+  }
+}
+
 const exportExcel = async () => {
   if (total.value === 0) {
     ElMessage.warning('当前没有数据可以导出！')
     return
   }
   exporting.value = true
+  exportProgress.value = { loaded: 0, total: 0 }
   try {
     const allData = await fetchAllData()
     if (allData.length === 0) {
@@ -302,66 +319,135 @@ const exportExcel = async () => {
     }
 
     const useCalculatedRate = exchangeRate.value > 0
+    const IMG_COL = 3   // 产品图片在第 3 列（C列）
+    const IMG_W = 80    // 图片宽度 px
+    const IMG_H = 80    // 图片高度 px
+    const ROW_H = 68    // 行高 pt
 
-    const header = [
-      '序号', '设备名称', '产品图片', '规格', '出厂价(¥)',
-      '美元价(USD)', '人民币价(¥)',
-      '设备尺寸', '木架尺寸', '体积', '面积',
-      '标准配置', '备注', '游戏说明'
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('启迅价格表')
+
+    // 列定义
+    ws.columns = [
+      { header: '序号', key: 'index', width: 7 },
+      { header: '设备名称', key: 'name', width: 38 },
+      { header: '产品图片', key: 'image', width: 14 },
+      { header: '规格', key: 'spec', width: 13 },
+      { header: '出厂价(¥)', key: 'factory', width: 13 },
+      { header: '美元价(USD)', key: 'usd', width: 14 },
+      { header: '人民币价(¥)', key: 'rmb', width: 13 },
+      { header: '设备尺寸', key: 'eq_dim', width: 24 },
+      { header: '木架尺寸', key: 'wood_dim', width: 32 },
+      { header: '体积', key: 'volume', width: 20 },
+      { header: '面积', key: 'area', width: 18 },
+      { header: '标准配置', key: 'config', width: 20 },
+      { header: '备注', key: 'remarks', width: 32 },
+      { header: '游戏说明', key: 'instructions', width: 42 }
     ]
 
-    const rows = allData.map((item, index) => {
+    // 表头样式
+    const headerRow = ws.getRow(1)
+    headerRow.font = { bold: true, size: 11 }
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' }
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE8F4FD' }
+    }
+    headerRow.height = 24
+
+    // 收集需要下载图片的行
+    const imageTasks = []
+    exportProgress.value.total = allData.filter(d => d.image_url).length
+
+    // 填充数据行
+    allData.forEach((item, idx) => {
       const usdPrice = useCalculatedRate && item.price_rmb
         ? Math.ceil(item.price_rmb / exchangeRate.value)
         : item.price_usd
 
-      return [
-        index + 1,
-        item.equipment_name,
-        item.image_url || '',
-        item.specification,
-        item.factory_price,
-        usdPrice,
-        item.price_rmb,
-        item.equipment_dimensions,
-        item.wooden_frame_dimensions,
-        item.volume,
-        item.area,
-        item.standard_configuration,
-        item.remarks,
-        item.game_instructions
-      ]
+      const row = ws.addRow({
+        index: idx + 1,
+        name: item.equipment_name,
+        image: '',  // 图片通过 addImage 嵌入
+        spec: item.specification,
+        factory: item.factory_price,
+        usd: usdPrice,
+        rmb: item.price_rmb,
+        eq_dim: item.equipment_dimensions,
+        wood_dim: item.wooden_frame_dimensions,
+        volume: item.volume,
+        area: item.area,
+        config: item.standard_configuration,
+        remarks: item.remarks,
+        instructions: item.game_instructions
+      })
+      row.height = ROW_H
+      row.alignment = { vertical: 'middle', wrapText: true }
+
+      // 价格列右对齐
+      ;[5, 6, 7].forEach(col => {
+        row.getCell(col).alignment = { horizontal: 'right', vertical: 'middle' }
+      })
+      // 序号列居中
+      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+
+      // 记录有图片的行，稍后下载并嵌入
+      if (item.image_url) {
+        imageTasks.push({ rowIndex: idx + 2, url: item.image_url })
+      }
     })
 
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+    // 边框样式
+    const thinBorder = {
+      top: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+      left: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+      bottom: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+      right: { style: 'thin', color: { argb: 'FFD9D9D9' } }
+    }
+    ws.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = thinBorder
+      })
+    })
 
-    // 为图片 URL 列添加超链接
-    for (let r = 0; r < rows.length; r++) {
-      const cellRef = XLSX.utils.encode_cell({ r: r + 1, c: 2 }) // 第3列（产品图片），+1 跳过表头
-      if (ws[cellRef] && rows[r][2]) {
-        ws[cellRef] = {
-          t: 's',
-          v: rows[r][2],
-          l: { Target: rows[r][2], Tooltip: '点击查看图片' }
-        }
+    // 并发下载图片并嵌入（最多 5 个并发）
+    const CONCURRENCY = 5
+    let completed = 0
+    const runBatch = async (tasks) => {
+      for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+        const batch = tasks.slice(i, i + CONCURRENCY)
+        await Promise.all(batch.map(async ({ rowIndex, url }) => {
+          const buf = await fetchImageBuffer(url)
+          if (!buf) { completed++; return }
+          const ext = url.match(/\.png/i) ? 'png' : 'jpeg'
+          const imageId = wb.addImage({ buffer: buf, extension: ext })
+          ws.addImage(imageId, {
+            tl: { col: IMG_COL - 1 + 0.05, row: rowIndex - 1 + 0.05 },
+            ext: { width: IMG_W, height: IMG_H }
+          })
+          completed++
+          exportProgress.value = { ...exportProgress.value, loaded: completed }
+        }))
       }
     }
+    await runBatch(imageTasks)
 
-    ws['!cols'] = [
-      { wch: 6 }, { wch: 35 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
-      { wch: 14 }, { wch: 12 },
-      { wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 16 },
-      { wch: 18 }, { wch: 30 }, { wch: 40 }
-    ]
-    XLSX.utils.book_append_sheet(wb, ws, '启迅价格表')
+    // 生成文件并下载
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `启迅价格表_${new Date().toISOString().split('T')[0]}.xlsx`
+    link.click()
+    URL.revokeObjectURL(link.href)
 
-    XLSX.writeFile(wb, `启迅价格表_${new Date().toISOString().split('T')[0]}.xlsx`)
     ElMessage.success(`导出成功！共 ${allData.length} 条数据`)
   } catch (err) {
     ElMessage.error('导出失败: ' + (err.message || err))
   } finally {
     exporting.value = false
+    exportProgress.value = { loaded: 0, total: 0 }
   }
 }
 
