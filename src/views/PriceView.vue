@@ -10,20 +10,45 @@
     />
 
     <div class="price-content">
-      <div class="exchange-rate-bar">
-        <span class="exchange-rate-label">汇率换算：</span>
-        <el-input
-          v-model.number="exchangeRate"
-          placeholder="输入汇率，如 6.75"
-          style="width: 200px"
-          clearable
-          type="number"
-          :step="0.01"
-          :min="0"
-        />
-        <span v-if="exchangeRate > 0" class="exchange-rate-hint">
-          美元价 = 人民币价 ÷ {{ exchangeRate }}，向上取整
-        </span>
+      <div class="filter-bar">
+        <div class="filter-row">
+          <span class="exchange-rate-label">汇率换算：</span>
+          <el-input
+            v-model.number="exchangeRate"
+            placeholder="输入汇率，如 6.75"
+            style="width: 200px"
+            clearable
+            type="number"
+            :step="0.01"
+            :min="0"
+          />
+          <span v-if="exchangeRate > 0" class="exchange-rate-hint">
+            美元价 = 人民币价 ÷ {{ exchangeRate }}，向上取整
+          </span>
+        </div>
+        <div class="filter-row">
+          <span class="exchange-rate-label">设备名称：</span>
+          <el-input
+            v-model="searchName"
+            placeholder="输入设备名称搜索"
+            style="width: 260px"
+            clearable
+            @keyup.enter="handleSearch"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="handleSearch" />
+            </template>
+          </el-input>
+          <el-button
+            type="success"
+            :icon="Download"
+            :loading="exporting"
+            @click="exportExcel"
+            style="margin-left: auto"
+          >
+            导出 Excel
+          </el-button>
+        </div>
       </div>
 
       <el-table
@@ -95,6 +120,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Download, Search } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import { supabase, PRICE_TABLE_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
 import PageHeader from '../components/PageHeader.vue'
@@ -122,6 +149,9 @@ const setStatus = (type, text) => {
 
 // ========== 汇率 ==========
 const exchangeRate = ref(null)
+
+// ========== 筛选 ==========
+const searchName = ref('')
 
 // ========== 表格数据 ==========
 const tableRef = ref(null)
@@ -165,6 +195,15 @@ const mapFromDB = (row) => ({
   game_instructions: row.game_instructions || ''
 })
 
+const buildQuery = () => {
+  let q = supabase.from(PRICE_TABLE_NAME).select('*', { count: 'exact' })
+  if (searchName.value.trim()) {
+    q = q.ilike('equipment_name', `%${searchName.value.trim()}%`)
+  }
+  q = q.order('id', { ascending: true })
+  return q
+}
+
 const fetchPage = async () => {
   if (loadingTable.value) return
   if (!currentUser.value) {
@@ -176,11 +215,7 @@ const fetchPage = async () => {
   try {
     const from = (currentPage.value - 1) * pageSize.value
     const to = from + pageSize.value - 1
-    const { data, error, count } = await supabase
-      .from(PRICE_TABLE_NAME)
-      .select('*', { count: 'exact' })
-      .order('id', { ascending: true })
-      .range(from, to)
+    const { data, error, count } = await buildQuery().range(from, to)
     if (error) throw error
     tableData.value = (data || []).map(mapFromDB)
     total.value = count || 0
@@ -202,6 +237,11 @@ const fetchPage = async () => {
   }
 }
 
+const handleSearch = () => {
+  currentPage.value = 1
+  fetchPage()
+}
+
 const handleSizeChange = (size) => {
   pageSize.value = size
   currentPage.value = 1
@@ -214,6 +254,83 @@ const handleCurrentChange = (page) => {
 }
 
 const tableRowClassName = () => 'price-table-row'
+
+// ========== 导出 Excel ==========
+const exporting = ref(false)
+
+const fetchAllData = async () => {
+  let q = supabase.from(PRICE_TABLE_NAME).select('*')
+  if (searchName.value.trim()) {
+    q = q.ilike('equipment_name', `%${searchName.value.trim()}%`)
+  }
+  q = q.order('id', { ascending: true })
+  const { data, error } = await q
+  if (error) throw error
+  return (data || []).map(mapFromDB)
+}
+
+const exportExcel = async () => {
+  if (total.value === 0) {
+    ElMessage.warning('当前没有数据可以导出！')
+    return
+  }
+  exporting.value = true
+  try {
+    const allData = await fetchAllData()
+    if (allData.length === 0) {
+      ElMessage.warning('没有可导出的数据！')
+      return
+    }
+
+    const useCalculatedRate = exchangeRate.value > 0
+
+    const header = [
+      '序号', '设备名称', '规格', '出厂价(¥)',
+      '美元价(USD)', '人民币价(¥)',
+      '设备尺寸', '木架尺寸', '体积', '面积',
+      '标准配置', '备注', '游戏说明'
+    ]
+
+    const rows = allData.map((item, index) => {
+      const usdPrice = useCalculatedRate && item.price_rmb
+        ? Math.ceil(item.price_rmb / exchangeRate.value)
+        : item.price_usd
+
+      return [
+        index + 1,
+        item.equipment_name,
+        item.specification,
+        item.factory_price,
+        usdPrice,
+        item.price_rmb,
+        item.equipment_dimensions,
+        item.wooden_frame_dimensions,
+        item.volume,
+        item.area,
+        item.standard_configuration,
+        item.remarks,
+        item.game_instructions
+      ]
+    })
+
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+    ws['!cols'] = [
+      { wch: 6 }, { wch: 35 }, { wch: 12 }, { wch: 12 },
+      { wch: 14 }, { wch: 12 },
+      { wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 16 },
+      { wch: 18 }, { wch: 30 }, { wch: 40 }
+    ]
+    XLSX.utils.book_append_sheet(wb, ws, '启迅价格表')
+
+    XLSX.writeFile(wb, `启迅价格表_${new Date().toISOString().split('T')[0]}.xlsx`)
+    ElMessage.success(`导出成功！共 ${allData.length} 条数据`)
+  } catch (err) {
+    ElMessage.error('导出失败: ' + (err.message || err))
+  } finally {
+    exporting.value = false
+  }
+}
 
 // ========== 生命周期 ==========
 onMounted(async () => {
@@ -234,12 +351,19 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.exchange-rate-bar {
+.filter-bar {
+  margin-bottom: 12px;
+}
+
+.filter-row {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.filter-row + .filter-row {
+  margin-top: 10px;
 }
 
 .exchange-rate-label {
