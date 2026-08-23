@@ -2,16 +2,18 @@ import { ref } from 'vue'
 import { supabase } from '../config/supabase'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+// 单例状态，所有组件共享同一份认证实例
+const currentUser = ref(null)
+const displayUsername = ref('--')
+const authDialogVisible = ref(false)
+const authLoading = ref(false)
+const authError = ref('')
+const authForm = ref({ email: '', password: '' })
+const fullscreenLoading = ref(false)
+const bootReady = ref(false)
+let authListener = null
+
 export function useAuth() {
-  const currentUser = ref(null)
-  const displayUsername = ref('--')
-  const authDialogVisible = ref(false)
-  const authLoading = ref(false)
-  const authError = ref('')
-  const authForm = ref({ email: '', password: '' })
-  const fullscreenLoading = ref(false)
-  const bootReady = ref(false)
-  let authListener = null
 
   const showAuthPage = () => {
     authForm.value = { email: '', password: '' }

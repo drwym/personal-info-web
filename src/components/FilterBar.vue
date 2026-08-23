@@ -67,12 +67,6 @@
         </el-input>
       </div>
       <div class="filter-group" style="margin-left:auto;">
-        <el-button type="success" plain @click="$emit('show-holidays')">
-          <el-icon><Calendar /></el-icon> 各国节日
-        </el-button>
-        <el-button type="warning" plain @click="$emit('manage-sources')">
-          <el-icon><Setting /></el-icon> 管理来源
-        </el-button>
         <el-button type="primary" :loading="refreshing" @click="$emit('refresh')">
           <el-icon><Refresh /></el-icon> 刷新数据
         </el-button>
@@ -91,7 +85,7 @@ const props = defineProps({
   refreshing: Boolean
 })
 
-const emit = defineEmits(['update:currentFilters', 'search-user-code', 'manage-sources', 'refresh', 'show-holidays'])
+const emit = defineEmits(['update:currentFilters', 'search-user-code', 'refresh'])
 
 const localStatus = computed({
   get: () => props.currentFilters.status,

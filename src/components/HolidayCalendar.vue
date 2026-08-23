@@ -2,9 +2,6 @@
   <div class="holiday-calendar-wrapper" v-loading="loading" element-loading-text="正在加载节日数据...">
     <!-- 顶部工具栏 -->
     <div class="calendar-toolbar">
-      <el-button text @click="$emit('back')">
-        <el-icon><ArrowLeft /></el-icon> 返回
-      </el-button>
       <div class="calendar-title">{{ currentYear }}年 {{ currentMonth }}月节日</div>
       <el-select
         v-model="selectedCountries"
@@ -95,8 +92,6 @@ import { ref, computed, watch, onMounted, reactive } from 'vue'
 import { ArrowLeft, ArrowRight, Loading } from '@element-plus/icons-vue'
 import { useHolidays } from '../composables/useHolidays'
 import { HOLIDAY_COUNTRY_CODES, isoToCn } from '../utils/countryCodeMap'
-
-const emit = defineEmits(['back'])
 
 const now = new Date()
 const currentYear = ref(now.getFullYear())
