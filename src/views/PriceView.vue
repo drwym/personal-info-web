@@ -64,13 +64,32 @@
       >
         <el-table-column type="index" label="序号" width="60" align="center" fixed />
         <el-table-column prop="equipment_name" label="设备名称" min-width="200" show-overflow-tooltip fixed />
-        <!-- 图片列暂时隐藏，待后续迭代启用：image_url 字段已存在于数据结构中 -->
-        <!-- <el-table-column prop="image_url" label="产品图片" width="120" align="center">
+        <el-table-column prop="image_url" label="产品图片" width="110" align="center">
           <template #default="{ row }">
-            <el-image v-if="row.image_url" :src="row.image_url" style="width: 80px; height: 80px" fit="contain" :preview-src-list="[row.image_url]" />
-            <span v-else>-</span>
+            <div v-if="row.image_url" class="image-cell">
+              <el-image
+                :src="row.image_url"
+                style="width: 70px; height: 70px"
+                fit="contain"
+                :preview-src-list="[row.image_url]"
+                preview-teleported
+                lazy
+              >
+                <template #error>
+                  <div class="image-error">
+                    <el-icon :size="20"><Picture /></el-icon>
+                  </div>
+                </template>
+                <template #placeholder>
+                  <div class="image-loading">
+                    <el-icon class="is-loading" :size="18"><Loading /></el-icon>
+                  </div>
+                </template>
+              </el-image>
+            </div>
+            <span v-else class="image-empty">-</span>
           </template>
-        </el-table-column> -->
+        </el-table-column>
         <el-table-column prop="specification" label="规格" width="100" align="center" />
         <el-table-column prop="factory_price" label="出厂价(¥)" width="120" align="right">
           <template #default="{ row }">
@@ -120,7 +139,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Download, Search } from '@element-plus/icons-vue'
+import { Download, Search, Picture, Loading } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { supabase, PRICE_TABLE_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
@@ -285,7 +304,7 @@ const exportExcel = async () => {
     const useCalculatedRate = exchangeRate.value > 0
 
     const header = [
-      '序号', '设备名称', '规格', '出厂价(¥)',
+      '序号', '设备名称', '产品图片', '规格', '出厂价(¥)',
       '美元价(USD)', '人民币价(¥)',
       '设备尺寸', '木架尺寸', '体积', '面积',
       '标准配置', '备注', '游戏说明'
@@ -299,6 +318,7 @@ const exportExcel = async () => {
       return [
         index + 1,
         item.equipment_name,
+        item.image_url || '',
         item.specification,
         item.factory_price,
         usdPrice,
@@ -315,8 +335,21 @@ const exportExcel = async () => {
 
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+
+    // 为图片 URL 列添加超链接
+    for (let r = 0; r < rows.length; r++) {
+      const cellRef = XLSX.utils.encode_cell({ r: r + 1, c: 2 }) // 第3列（产品图片），+1 跳过表头
+      if (ws[cellRef] && rows[r][2]) {
+        ws[cellRef] = {
+          t: 's',
+          v: rows[r][2],
+          l: { Target: rows[r][2], Tooltip: '点击查看图片' }
+        }
+      }
+    }
+
     ws['!cols'] = [
-      { wch: 6 }, { wch: 35 }, { wch: 12 }, { wch: 12 },
+      { wch: 6 }, { wch: 35 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
       { wch: 14 }, { wch: 12 },
       { wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 16 },
       { wch: 18 }, { wch: 30 }, { wch: 40 }
@@ -391,6 +424,51 @@ onMounted(async () => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* 图片列样式 */
+.image-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.image-cell :deep(.el-image) {
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.image-cell :deep(.el-image:hover) {
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.image-error,
+.image-loading {
+  width: 70px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fa;
+  border-radius: 4px;
+  color: #c0c4cc;
+}
+
+.image-empty {
+  color: #c0c4cc;
+  font-size: 14px;
+}
+
+/* 表格行样式优化 */
+:deep(.price-table-row td) {
+  vertical-align: middle;
+}
+
+:deep(.el-table) {
+  --el-table-row-hover-bg-color: #ecf5ff;
 }
 
 @media (max-width: 768px) {
