@@ -10,6 +10,22 @@
     />
 
     <div class="price-content">
+      <div class="exchange-rate-bar">
+        <span class="exchange-rate-label">汇率换算：</span>
+        <el-input
+          v-model.number="exchangeRate"
+          placeholder="输入汇率，如 6.75"
+          style="width: 200px"
+          clearable
+          type="number"
+          :step="0.01"
+          :min="0"
+        />
+        <span v-if="exchangeRate > 0" class="exchange-rate-hint">
+          美元价 = 人民币价 ÷ {{ exchangeRate }}，向上取整
+        </span>
+      </div>
+
       <el-table
         ref="tableRef"
         :data="tableData"
@@ -38,7 +54,12 @@
         </el-table-column>
         <el-table-column prop="price_usd" label="美元价(USD)" width="130" align="right">
           <template #default="{ row }">
-            {{ row.price_usd ? Number(row.price_usd).toLocaleString() : '-' }}
+            <template v-if="exchangeRate > 0 && row.price_rmb">
+              <span class="calculated-price">{{ Math.ceil(row.price_rmb / exchangeRate).toLocaleString() }}</span>
+            </template>
+            <template v-else>
+              {{ row.price_usd ? Number(row.price_usd).toLocaleString() : '-' }}
+            </template>
           </template>
         </el-table-column>
         <el-table-column prop="price_rmb" label="人民币价(¥)" width="130" align="right">
@@ -98,6 +119,9 @@ const setStatus = (type, text) => {
   else if (type === 'error') statusTagType.value = 'danger'
   else statusTagType.value = 'info'
 }
+
+// ========== 汇率 ==========
+const exchangeRate = ref(null)
 
 // ========== 表格数据 ==========
 const tableRef = ref(null)
@@ -210,6 +234,31 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.exchange-rate-bar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exchange-rate-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  white-space: nowrap;
+}
+
+.exchange-rate-hint {
+  font-size: 12px;
+  color: #909399;
+}
+
+.calculated-price {
+  color: #e6a23c;
+  font-weight: 600;
+}
+
 .price-content {
   padding: 16px;
 }
