@@ -22,8 +22,12 @@
             :step="0.01"
             :min="0"
           />
+          <el-radio-group v-model="calcDirection" size="small" style="margin-left: 8px">
+            <el-radio-button value="forward">USD = RMB ÷ 汇率</el-radio-button>
+            <el-radio-button value="reverse">RMB = USD × 汇率</el-radio-button>
+          </el-radio-group>
           <span v-if="exchangeRate > 0" class="exchange-rate-hint">
-            美元价 = 人民币价 ÷ {{ exchangeRate }}，向上取整
+            {{ calcDirection === 'forward' ? `美元价 = 人民币价 ÷ ${exchangeRate}，向上取整` : `人民币价 = 美元价 × ${exchangeRate}` }}
           </span>
         </div>
         <div class="filter-row">
@@ -113,7 +117,7 @@
         </el-table-column>
         <el-table-column prop="price_usd" label="Price(USD)" width="130" align="right">
           <template #default="{ row }">
-            <template v-if="exchangeRate > 0 && row.price_rmb">
+            <template v-if="exchangeRate > 0 && row.price_rmb && calcDirection === 'forward'">
               <span class="calculated-price">{{ Math.ceil(row.price_rmb / exchangeRate).toLocaleString() }}</span>
             </template>
             <template v-else>
@@ -123,7 +127,12 @@
         </el-table-column>
         <el-table-column prop="price_rmb" label="Price(RMB)" width="130" align="right">
           <template #default="{ row }">
-            {{ row.price_rmb ? Number(row.price_rmb).toLocaleString() : '-' }}
+            <template v-if="exchangeRate > 0 && row.price_usd && calcDirection === 'reverse'">
+              <span class="calculated-price">{{ Math.round(row.price_usd * exchangeRate).toLocaleString() }}</span>
+            </template>
+            <template v-else>
+              {{ row.price_rmb ? Number(row.price_rmb).toLocaleString() : '-' }}
+            </template>
           </template>
         </el-table-column>
         <el-table-column prop="equipment_dimensions" label="Equipment Dimensions" min-width="180" show-overflow-tooltip />
@@ -185,6 +194,7 @@ const setStatus = (type, text) => {
 
 // ========== 汇率 ==========
 const exchangeRate = ref(null)
+const calcDirection = ref('forward') // 'forward': USD=RMB/rate, 'reverse': RMB=USD*rate
 
 // ========== 筛选 ==========
 const searchName = ref('')
@@ -391,7 +401,6 @@ const exportExcel = async () => {
       { header: 'Equipment Name', key: 'name', width: 38 },
       { header: 'Equipment Images', key: 'image', width: 14 },
       { header: 'Specification', key: 'spec', width: 13 },
-      { header: 'Factory Price', key: 'factory', width: 13 },
       { header: 'Price(USD)', key: 'usd', width: 14 },
       { header: 'Price(RMB)', key: 'rmb', width: 13 },
       { header: 'Equipment Dimensions', key: 'eq_dim', width: 24 },
@@ -420,18 +429,20 @@ const exportExcel = async () => {
 
     // 填充数据行
     allData.forEach((item, idx) => {
-      const usdPrice = useCalculatedRate && item.price_rmb
+      const usdPrice = useCalculatedRate && item.price_rmb && calcDirection.value === 'forward'
         ? Math.ceil(item.price_rmb / exchangeRate.value)
         : item.price_usd
+      const rmbPrice = useCalculatedRate && item.price_usd && calcDirection.value === 'reverse'
+        ? Math.round(item.price_usd * exchangeRate.value)
+        : item.price_rmb
 
       const row = ws.addRow({
         index: idx + 1,
         name: item.equipment_name,
         image: '',  // 图片通过 addImage 嵌入
         spec: item.specification,
-        factory: item.factory_price,
         usd: usdPrice,
-        rmb: item.price_rmb,
+        rmb: rmbPrice,
         eq_dim: item.equipment_dimensions,
         wood_dim: item.wooden_frame_dimensions,
         volume: item.volume,
@@ -444,7 +455,7 @@ const exportExcel = async () => {
       row.alignment = { vertical: 'middle', wrapText: true }
 
       // 价格列右对齐
-      ;[5, 6, 7].forEach(col => {
+      ;[4, 5, 6].forEach(col => {
         row.getCell(col).alignment = { horizontal: 'right', vertical: 'middle' }
       })
       // 序号列居中
@@ -546,9 +557,12 @@ const exportPDF = async () => {
     // 构建 HTML 表格
     const fmtPrice = (v) => v != null ? Number(v).toLocaleString() : ''
     const rowsHTML = allData.map((item, idx) => {
-      const usdPrice = useCalculatedRate && item.price_rmb
+      const usdPrice = useCalculatedRate && item.price_rmb && calcDirection.value === 'forward'
         ? Math.ceil(item.price_rmb / exchangeRate.value)
         : item.price_usd
+      const rmbPrice = useCalculatedRate && item.price_usd && calcDirection.value === 'reverse'
+        ? Math.round(item.price_usd * exchangeRate.value)
+        : item.price_rmb
       const imgSrc = imageDataMap.get(idx) || ''
       const imgCell = imgSrc
         ? `<img src="${imgSrc}" style="width:40px;height:40px;object-fit:contain;display:block;margin:auto">`
@@ -558,9 +572,8 @@ const exportPDF = async () => {
         <td>${item.equipment_name || ''}</td>
         <td style="text-align:center">${imgCell}</td>
         <td style="text-align:center">${item.specification || ''}</td>
-        <td style="text-align:right">${fmtPrice(item.factory_price)}</td>
         <td style="text-align:right">${fmtPrice(usdPrice)}</td>
-        <td style="text-align:right">${fmtPrice(item.price_rmb)}</td>
+        <td style="text-align:right">${fmtPrice(rmbPrice)}</td>
         <td>${item.equipment_dimensions || ''}</td>
         <td>${item.wooden_frame_dimensions || ''}</td>
         <td>${item.volume || ''}</td>
@@ -574,7 +587,7 @@ const exportPDF = async () => {
     const html = `<table>
       <thead><tr>
         <th>#</th><th>Equipment Name</th><th>Equipment Images</th>
-        <th>Specification</th><th>Factory Price</th><th>Price(USD)</th>
+        <th>Specification</th><th>Price(USD)</th>
         <th>Price(RMB)</th><th>Equipment Dimensions</th>
         <th>Wooden frame dimensions</th><th>Volume</th><th>Area</th>
         <th>Standard configuration</th><th>Remarks</th><th>Game Instructions</th>
