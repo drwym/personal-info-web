@@ -157,7 +157,7 @@ import { ElMessage } from 'element-plus'
 import { Download, Search, Picture, Loading } from '@element-plus/icons-vue'
 import ExcelJS from 'exceljs'
 import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import html2canvas from 'html2canvas'
 import { supabase, PRICE_TABLE_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
 import PageHeader from '../components/PageHeader.vue'
@@ -337,23 +337,6 @@ const fetchImageAsDataURL = async (url) => {
   }
 }
 
-/** 并发下载图片，返回 Map<rowIndex, dataURL> */
-const downloadImagesConcurrently = async (tasks, onProgress) => {
-  const results = new Map()
-  const CONCURRENCY = 5
-  let completed = 0
-  for (let i = 0; i < tasks.length; i += CONCURRENCY) {
-    const batch = tasks.slice(i, i + CONCURRENCY)
-    await Promise.all(batch.map(async ({ rowIndex, url }) => {
-      const dataURL = await fetchImageAsDataURL(url)
-      if (dataURL) results.set(rowIndex, dataURL)
-      completed++
-      onProgress?.(completed)
-    }))
-  }
-  return results
-}
-
 const exportExcel = async () => {
   if (total.value === 0) {
     ElMessage.warning('当前没有数据可以导出！')
@@ -514,126 +497,184 @@ const exportPDF = async () => {
     }
 
     const useCalculatedRate = exchangeRate.value > 0
-    const IMG_SIZE = 14 // 图片在 PDF 中的尺寸（pt）
 
-    // 创建 A3 横向 PDF（表格列多，需要更宽页面）
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a3' })
-
-    // 标题
-    doc.setFontSize(16)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Qixun Technology Price List', 42, 36)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(120, 120, 120)
-    doc.text(`Date: ${new Date().toISOString().split('T')[0]}`, 42, 52)
-    doc.setTextColor(0, 0, 0)
-
-    // 预下载图片
-    const imageTasks = []
-    allData.forEach((item, idx) => {
-      if (item.image_url) {
-        imageTasks.push({ rowIndex: idx, url: item.image_url })
-      }
-    })
+    // 预下载图片（用于进度显示）
+    const imageTasks = allData
+      .map((item, idx) => item.image_url ? { rowIndex: idx, url: item.image_url } : null)
+      .filter(Boolean)
     exportProgress.value.total = imageTasks.length
-    const imageMap = await downloadImagesConcurrently(imageTasks, (loaded) => {
-      exportProgress.value = { ...exportProgress.value, loaded }
-    })
 
-    // 构建表格数据
-    const headers = [
-      '#', 'Equipment Name', 'Equipment Images', 'Specification',
-      'Factory Price', 'Price(USD)', 'Price(RMB)',
-      'Equipment Dimensions', 'Wooden frame dimensions',
-      'Volume', 'Area', 'Standard configuration', 'Remarks', 'Game Instructions'
-    ]
+    // 预下载图片并转为 base64（html2canvas 需要 CORS 安全的图片）
+    const imageDataMap = new Map()
+    const CONCURRENCY = 5
+    let completed = 0
+    for (let i = 0; i < imageTasks.length; i += CONCURRENCY) {
+      const batch = imageTasks.slice(i, i + CONCURRENCY)
+      await Promise.all(batch.map(async ({ rowIndex, url }) => {
+        const dataURL = await fetchImageAsDataURL(url)
+        if (dataURL) imageDataMap.set(rowIndex, dataURL)
+        completed++
+        exportProgress.value = { ...exportProgress.value, loaded: completed }
+      }))
+    }
 
-    const body = allData.map((item, idx) => {
+    // 构建 HTML 表格
+    const fmtPrice = (v) => v != null ? Number(v).toLocaleString() : ''
+    const rowsHTML = allData.map((item, idx) => {
       const usdPrice = useCalculatedRate && item.price_rmb
         ? Math.ceil(item.price_rmb / exchangeRate.value)
         : item.price_usd
-      return [
-        idx + 1,
-        item.equipment_name,
-        '', // 图片通过 didDrawCell 嵌入
-        item.specification || '',
-        item.factory_price ?? '',
-        usdPrice ?? '',
-        item.price_rmb ?? '',
-        item.equipment_dimensions || '',
-        item.wooden_frame_dimensions || '',
-        item.volume || '',
-        item.area || '',
-        item.standard_configuration || '',
-        item.remarks || '',
-        item.game_instructions || ''
-      ]
-    })
+      const imgSrc = imageDataMap.get(idx) || ''
+      const imgCell = imgSrc
+        ? `<img src="${imgSrc}" style="width:40px;height:40px;object-fit:contain;display:block;margin:auto">`
+        : ''
+      return `<tr>
+        <td style="text-align:center">${idx + 1}</td>
+        <td>${item.equipment_name || ''}</td>
+        <td style="text-align:center">${imgCell}</td>
+        <td style="text-align:center">${item.specification || ''}</td>
+        <td style="text-align:right">${fmtPrice(item.factory_price)}</td>
+        <td style="text-align:right">${fmtPrice(usdPrice)}</td>
+        <td style="text-align:right">${fmtPrice(item.price_rmb)}</td>
+        <td>${item.equipment_dimensions || ''}</td>
+        <td>${item.wooden_frame_dimensions || ''}</td>
+        <td>${item.volume || ''}</td>
+        <td>${item.area || ''}</td>
+        <td>${item.standard_configuration || ''}</td>
+        <td>${item.remarks || ''}</td>
+        <td>${item.game_instructions || ''}</td>
+      </tr>`
+    }).join('')
 
-    // 生成表格
-    autoTable(doc, {
-      head: [headers],
-      body,
-      startY: 64,
-      styles: {
-        fontSize: 7,
-        cellPadding: 2,
-        overflow: 'linebreak',
-        valign: 'middle',
-        lineColor: [220, 220, 220],
-        lineWidth: 0.3
-      },
-      headStyles: {
-        fillColor: [41, 128, 185],
-        textColor: 255,
-        fontStyle: 'bold',
-        halign: 'center',
-        fontSize: 7.5
-      },
-      columnStyles: {
-        0: { halign: 'center', cellWidth: 22 },
-        1: { cellWidth: 80 },
-        2: { cellWidth: 30, halign: 'center' },
-        3: { cellWidth: 35, halign: 'center' },
-        4: { halign: 'right', cellWidth: 42 },
-        5: { halign: 'right', cellWidth: 38 },
-        6: { halign: 'right', cellWidth: 40 },
-        7: { cellWidth: 55 },
-        8: { cellWidth: 55 },
-        9: { cellWidth: 38 },
-        10: { cellWidth: 32 },
-        11: { cellWidth: 50 },
-        12: { cellWidth: 65 },
-        13: { cellWidth: 80 }
-      },
-      alternateRowStyles: { fillColor: [247, 250, 252] },
-      margin: { left: 20, right: 20 },
-      didDrawCell: (data) => {
-        // 在图片列（第3列，index=2）嵌入图片
-        if (data.section === 'body' && data.column.index === 2) {
-          const dataURL = imageMap.get(data.row.index)
-          if (dataURL) {
-            const x = data.cell.x + (data.cell.width - IMG_SIZE) / 2
-            const y = data.cell.y + (data.cell.height - IMG_SIZE) / 2
-            doc.addImage(dataURL, 'PNG', x, y, IMG_SIZE, IMG_SIZE)
-          }
-        }
+    const html = `<table>
+      <thead><tr>
+        <th>#</th><th>Equipment Name</th><th>Equipment Images</th>
+        <th>Specification</th><th>Factory Price</th><th>Price(USD)</th>
+        <th>Price(RMB)</th><th>Equipment Dimensions</th>
+        <th>Wooden frame dimensions</th><th>Volume</th><th>Area</th>
+        <th>Standard configuration</th><th>Remarks</th><th>Game Instructions</th>
+      </tr></thead>
+      <tbody>${rowsHTML}</tbody>
+    </table>`
+
+    // 创建临时容器（z-index负值隐藏在底层，不用visibility:hidden以免html2canvas渲染空白）
+    const container = document.createElement('div')
+    container.style.cssText = 'position:fixed;top:0;left:0;z-index:-10000;width:1600px;background:#fff;padding:16px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif'
+    document.body.appendChild(container)
+    container.innerHTML = html
+
+    // 设置表格样式
+    const table = container.querySelector('table')
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px'
+    container.querySelectorAll('th, td').forEach(cell => {
+      cell.style.cssText += ';border:1px solid #ddd;padding:5px 6px;vertical-align:middle'
+    })
+    container.querySelectorAll('th').forEach(th => {
+      th.style.cssText += ';background:#2980b9;color:#fff;font-weight:600;text-align:center;font-size:11px'
+    })
+    // 交替行底色
+    container.querySelectorAll('tbody tr').forEach((tr, i) => {
+      if (i % 2 === 1) {
+        tr.querySelectorAll('td').forEach(td => {
+          td.style.backgroundColor = '#f7fafc'
+        })
       }
     })
+    // 设置行高以容纳图片
+    container.querySelectorAll('tbody td').forEach(td => {
+      td.style.lineHeight = '1.4'
+    })
 
-    // 添加页脚（页码）
-    const pageCount = doc.getNumberOfPages()
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i)
-      doc.setFontSize(8)
-      doc.setTextColor(150, 150, 150)
-      doc.text(
-        `Page ${i} / ${pageCount}`,
-        doc.internal.pageSize.getWidth() / 2,
-        doc.internal.pageSize.getHeight() - 12,
-        { align: 'center' }
-      )
+    // 强制浏览器完成布局计算
+    void container.offsetHeight
+
+    // 记录每行在容器内的 Y 偏移（用于分页对齐行边界）
+    // 容器在 top:0;left:0，所以 getBoundingClientRect().top 即为容器内偏移
+    const tbody = container.querySelector('tbody')
+    const rowOffsets = Array.from(tbody.querySelectorAll('tr')).map(tr => {
+      return tr.getBoundingClientRect().top
+    })
+    // 追加表格底部作为最后一个边界
+    rowOffsets.push(table.getBoundingClientRect().bottom)
+
+    // 渲染为 canvas（scale 2 保证高清）
+    const SCALE = 2
+    const canvas = await html2canvas(container, {
+      scale: SCALE,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      width: 1600,
+      windowWidth: 1600
+    })
+    document.body.removeChild(container)
+
+    // 将 HTML 行偏移转换为 canvas 像素坐标
+    const rowCanvasY = rowOffsets.map(y => y * SCALE)
+
+    // 生成 A4 横向 PDF
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const pageW = doc.internal.pageSize.getWidth()   // 297mm
+    const pageH = doc.internal.pageSize.getHeight()  // 210mm
+    const marginX = 6
+    const marginTop = 16
+    const marginBtm = 10
+    const contentW = pageW - marginX * 2  // 285mm
+
+    // 标题
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Qixun Technology Price List', pageW / 2, 9, { align: 'center' })
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(130, 130, 130)
+    doc.text(`Date: ${new Date().toISOString().split('T')[0]}`, pageW / 2, 14, { align: 'center' })
+    doc.setTextColor(0, 0, 0)
+
+    // 计算每页在 canvas 中可容纳的像素高度
+    const pxPerMm = canvas.width / contentW
+    const availHPx = Math.floor((pageH - marginTop - marginBtm) * pxPerMm)
+
+    // 按行边界分页：找到每页能容纳的最后一行
+    const totalPages = []
+    let cursor = 0  // 当前在 canvas 中的 Y 位置
+    while (cursor < canvas.height) {
+      const pageEnd = cursor + availHPx
+      if (pageEnd >= canvas.height) {
+        totalPages.push({ start: cursor, end: canvas.height })
+        break
+      }
+      // 在 rowCanvasY 中找到 <= pageEnd 的最大行边界
+      let bestEnd = cursor
+      for (const ry of rowCanvasY) {
+        if (ry > cursor && ry <= pageEnd) {
+          bestEnd = ry
+        }
+      }
+      // 如果找不到合适的边界（单行太高），至少前进一点避免死循环
+      if (bestEnd <= cursor) bestEnd = pageEnd
+      totalPages.push({ start: cursor, end: bestEnd })
+      cursor = bestEnd
+    }
+
+    for (let i = 0; i < totalPages.length; i++) {
+      if (i > 0) doc.addPage()
+      const { start, end } = totalPages[i]
+      const sliceH = end - start
+
+      const pageCanvas = document.createElement('canvas')
+      pageCanvas.width = canvas.width
+      pageCanvas.height = sliceH
+      const ctx = pageCanvas.getContext('2d')
+      ctx.drawImage(canvas, 0, -start)
+
+      const pageImg = pageCanvas.toDataURL('image/jpeg', 0.92)
+      const pageImgH = sliceH / pxPerMm
+      doc.addImage(pageImg, 'JPEG', marginX, marginTop, contentW, pageImgH)
+
+      // 页码
+      doc.setFontSize(7)
+      doc.setTextColor(160, 160, 160)
+      doc.text(`Page ${i + 1} / ${totalPages.length}`, pageW / 2, pageH - 4, { align: 'center' })
     }
 
     doc.save(`Qixun_PriceList_${new Date().toISOString().split('T')[0]}.pdf`)
