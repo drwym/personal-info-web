@@ -271,7 +271,7 @@ const buildQuery = () => {
   if (searchName.value.trim()) {
     q = q.ilike('equipment_name', `%${searchName.value.trim()}%`)
   }
-  q = q.order('id', { ascending: true })
+  q = q.order('equipment_name', { ascending: true })
   return q
 }
 
@@ -336,7 +336,7 @@ const fetchAllData = async () => {
   if (searchName.value.trim()) {
     q = q.ilike('equipment_name', `%${searchName.value.trim()}%`)
   }
-  q = q.order('id', { ascending: true })
+  q = q.order('equipment_name', { ascending: true })
   const { data, error } = await q
   if (error) throw error
   return await Promise.all((data || []).map(mapFromDB))
