@@ -39,18 +39,30 @@
               <el-button :icon="Search" @click="handleSearch" />
             </template>
           </el-input>
-          <el-button
-            type="success"
-            :icon="Download"
-            :loading="exporting"
-            @click="exportExcel"
-            style="margin-left: auto"
-          >
-            <template v-if="exporting && exportProgress.total > 0">
-              下载图片 {{ exportProgress.loaded }}/{{ exportProgress.total }}
-            </template>
-            <template v-else>导出 Excel</template>
-          </el-button>
+          <div style="margin-left: auto; display: flex; gap: 8px">
+            <el-button
+              type="primary"
+              :icon="Download"
+              :loading="exportingPdf"
+              @click="exportPDF"
+            >
+              <template v-if="exportingPdf && exportProgress.total > 0">
+                下载图片 {{ exportProgress.loaded }}/{{ exportProgress.total }}
+              </template>
+              <template v-else>导出 PDF</template>
+            </el-button>
+            <el-button
+              type="success"
+              :icon="Download"
+              :loading="exportingExcel"
+              @click="exportExcel"
+            >
+              <template v-if="exportingExcel && exportProgress.total > 0">
+                下载图片 {{ exportProgress.loaded }}/{{ exportProgress.total }}
+              </template>
+              <template v-else>导出 Excel</template>
+            </el-button>
+          </div>
         </div>
       </div>
 
@@ -65,9 +77,9 @@
         v-loading="loadingTable"
         element-loading-text="加载中..."
       >
-        <el-table-column type="index" label="序号" width="60" align="center" fixed />
-        <el-table-column prop="equipment_name" label="设备名称" min-width="200" show-overflow-tooltip fixed />
-        <el-table-column prop="image_url" label="产品图片" width="110" align="center">
+        <el-table-column type="index" label="#" width="60" align="center" fixed />
+        <el-table-column prop="equipment_name" label="Equipment Name" min-width="200" show-overflow-tooltip fixed />
+        <el-table-column prop="image_url" label="Equipment Images" width="110" align="center">
           <template #default="{ row }">
             <div v-if="row.image_url" class="image-cell">
               <el-image
@@ -93,13 +105,13 @@
             <span v-else class="image-empty">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="specification" label="规格" width="100" align="center" />
-        <el-table-column prop="factory_price" label="出厂价(¥)" width="120" align="right">
+        <el-table-column prop="specification" label="Specification" width="100" align="center" />
+        <el-table-column prop="factory_price" label="Factory Price" width="120" align="right">
           <template #default="{ row }">
             {{ row.factory_price ? Number(row.factory_price).toLocaleString() : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="price_usd" label="美元价(USD)" width="130" align="right">
+        <el-table-column prop="price_usd" label="Price(USD)" width="130" align="right">
           <template #default="{ row }">
             <template v-if="exchangeRate > 0 && row.price_rmb">
               <span class="calculated-price">{{ Math.ceil(row.price_rmb / exchangeRate).toLocaleString() }}</span>
@@ -109,18 +121,18 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column prop="price_rmb" label="人民币价(¥)" width="130" align="right">
+        <el-table-column prop="price_rmb" label="Price(RMB)" width="130" align="right">
           <template #default="{ row }">
             {{ row.price_rmb ? Number(row.price_rmb).toLocaleString() : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="equipment_dimensions" label="设备尺寸" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="wooden_frame_dimensions" label="木架尺寸" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="volume" label="体积" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="area" label="面积" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="standard_configuration" label="标准配置" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="remarks" label="备注" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="game_instructions" label="游戏说明" min-width="280" show-overflow-tooltip />
+        <el-table-column prop="equipment_dimensions" label="Equipment Dimensions" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="wooden_frame_dimensions" label="Wooden frame dimensions" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="volume" label="Volume" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="area" label="Area" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="standard_configuration" label="Standard configuration" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="remarks" label="Remarks" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="game_instructions" label="Game Instructions" min-width="280" show-overflow-tooltip />
       </el-table>
 
       <div class="price-pagination" v-if="total > 0">
@@ -144,6 +156,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Search, Picture, Loading } from '@element-plus/icons-vue'
 import ExcelJS from 'exceljs'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { supabase, PRICE_TABLE_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
 import PageHeader from '../components/PageHeader.vue'
@@ -277,8 +291,9 @@ const handleCurrentChange = (page) => {
 
 const tableRowClassName = () => 'price-table-row'
 
-// ========== 导出 Excel ==========
-const exporting = ref(false)
+// ========== 导出 ==========
+const exportingExcel = ref(false)
+const exportingPdf = ref(false)
 const exportProgress = ref({ loaded: 0, total: 0 })
 
 const fetchAllData = async () => {
@@ -304,12 +319,47 @@ const fetchImageBuffer = async (url) => {
   }
 }
 
+/** 从 URL 获取图片 base64 Data URL，失败返回 null */
+const fetchImageAsDataURL = async (url) => {
+  if (!url) return null
+  try {
+    const resp = await fetch(url, { mode: 'cors' })
+    if (!resp.ok) return null
+    const blob = await resp.blob()
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
+/** 并发下载图片，返回 Map<rowIndex, dataURL> */
+const downloadImagesConcurrently = async (tasks, onProgress) => {
+  const results = new Map()
+  const CONCURRENCY = 5
+  let completed = 0
+  for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+    const batch = tasks.slice(i, i + CONCURRENCY)
+    await Promise.all(batch.map(async ({ rowIndex, url }) => {
+      const dataURL = await fetchImageAsDataURL(url)
+      if (dataURL) results.set(rowIndex, dataURL)
+      completed++
+      onProgress?.(completed)
+    }))
+  }
+  return results
+}
+
 const exportExcel = async () => {
   if (total.value === 0) {
     ElMessage.warning('当前没有数据可以导出！')
     return
   }
-  exporting.value = true
+  exportingExcel.value = true
   exportProgress.value = { loaded: 0, total: 0 }
   try {
     const allData = await fetchAllData()
@@ -327,22 +377,22 @@ const exportExcel = async () => {
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('启迅价格表')
 
-    // 列定义
+    // 列定义（英文列名匹配原始 Excel）
     ws.columns = [
-      { header: '序号', key: 'index', width: 7 },
-      { header: '设备名称', key: 'name', width: 38 },
-      { header: '产品图片', key: 'image', width: 14 },
-      { header: '规格', key: 'spec', width: 13 },
-      { header: '出厂价(¥)', key: 'factory', width: 13 },
-      { header: '美元价(USD)', key: 'usd', width: 14 },
-      { header: '人民币价(¥)', key: 'rmb', width: 13 },
-      { header: '设备尺寸', key: 'eq_dim', width: 24 },
-      { header: '木架尺寸', key: 'wood_dim', width: 32 },
-      { header: '体积', key: 'volume', width: 20 },
-      { header: '面积', key: 'area', width: 18 },
-      { header: '标准配置', key: 'config', width: 20 },
-      { header: '备注', key: 'remarks', width: 32 },
-      { header: '游戏说明', key: 'instructions', width: 42 }
+      { header: '#', key: 'index', width: 7 },
+      { header: 'Equipment Name', key: 'name', width: 38 },
+      { header: 'Equipment Images', key: 'image', width: 14 },
+      { header: 'Specification', key: 'spec', width: 13 },
+      { header: 'Factory Price', key: 'factory', width: 13 },
+      { header: 'Price(USD)', key: 'usd', width: 14 },
+      { header: 'Price(RMB)', key: 'rmb', width: 13 },
+      { header: 'Equipment Dimensions', key: 'eq_dim', width: 24 },
+      { header: 'Wooden frame dimensions', key: 'wood_dim', width: 32 },
+      { header: 'Volume', key: 'volume', width: 20 },
+      { header: 'Area', key: 'area', width: 18 },
+      { header: 'Standard configuration', key: 'config', width: 20 },
+      { header: 'Remarks', key: 'remarks', width: 32 },
+      { header: 'Game Instructions', key: 'instructions', width: 42 }
     ]
 
     // 表头样式
@@ -414,24 +464,21 @@ const exportExcel = async () => {
     // 并发下载图片并嵌入（最多 5 个并发）
     const CONCURRENCY = 5
     let completed = 0
-    const runBatch = async (tasks) => {
-      for (let i = 0; i < tasks.length; i += CONCURRENCY) {
-        const batch = tasks.slice(i, i + CONCURRENCY)
-        await Promise.all(batch.map(async ({ rowIndex, url }) => {
-          const buf = await fetchImageBuffer(url)
-          if (!buf) { completed++; return }
-          const ext = url.match(/\.png/i) ? 'png' : 'jpeg'
-          const imageId = wb.addImage({ buffer: buf, extension: ext })
-          ws.addImage(imageId, {
-            tl: { col: IMG_COL - 1 + 0.05, row: rowIndex - 1 + 0.05 },
-            ext: { width: IMG_W, height: IMG_H }
-          })
-          completed++
-          exportProgress.value = { ...exportProgress.value, loaded: completed }
-        }))
-      }
+    for (let i = 0; i < imageTasks.length; i += CONCURRENCY) {
+      const batch = imageTasks.slice(i, i + CONCURRENCY)
+      await Promise.all(batch.map(async ({ rowIndex, url }) => {
+        const buf = await fetchImageBuffer(url)
+        if (!buf) { completed++; return }
+        const ext = url.match(/\.png/i) ? 'png' : 'jpeg'
+        const imageId = wb.addImage({ buffer: buf, extension: ext })
+        ws.addImage(imageId, {
+          tl: { col: IMG_COL - 1 + 0.05, row: rowIndex - 1 + 0.05 },
+          ext: { width: IMG_W, height: IMG_H }
+        })
+        completed++
+        exportProgress.value = { ...exportProgress.value, loaded: completed }
+      }))
     }
-    await runBatch(imageTasks)
 
     // 生成文件并下载
     const buffer = await wb.xlsx.writeBuffer()
@@ -446,7 +493,155 @@ const exportExcel = async () => {
   } catch (err) {
     ElMessage.error('导出失败: ' + (err.message || err))
   } finally {
-    exporting.value = false
+    exportingExcel.value = false
+    exportProgress.value = { loaded: 0, total: 0 }
+  }
+}
+
+// ========== 导出 PDF ==========
+const exportPDF = async () => {
+  if (total.value === 0) {
+    ElMessage.warning('当前没有数据可以导出！')
+    return
+  }
+  exportingPdf.value = true
+  exportProgress.value = { loaded: 0, total: 0 }
+  try {
+    const allData = await fetchAllData()
+    if (allData.length === 0) {
+      ElMessage.warning('没有可导出的数据！')
+      return
+    }
+
+    const useCalculatedRate = exchangeRate.value > 0
+    const IMG_SIZE = 14 // 图片在 PDF 中的尺寸（pt）
+
+    // 创建 A3 横向 PDF（表格列多，需要更宽页面）
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a3' })
+
+    // 标题
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Qixun Technology Price List', 42, 36)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(120, 120, 120)
+    doc.text(`Date: ${new Date().toISOString().split('T')[0]}`, 42, 52)
+    doc.setTextColor(0, 0, 0)
+
+    // 预下载图片
+    const imageTasks = []
+    allData.forEach((item, idx) => {
+      if (item.image_url) {
+        imageTasks.push({ rowIndex: idx, url: item.image_url })
+      }
+    })
+    exportProgress.value.total = imageTasks.length
+    const imageMap = await downloadImagesConcurrently(imageTasks, (loaded) => {
+      exportProgress.value = { ...exportProgress.value, loaded }
+    })
+
+    // 构建表格数据
+    const headers = [
+      '#', 'Equipment Name', 'Equipment Images', 'Specification',
+      'Factory Price', 'Price(USD)', 'Price(RMB)',
+      'Equipment Dimensions', 'Wooden frame dimensions',
+      'Volume', 'Area', 'Standard configuration', 'Remarks', 'Game Instructions'
+    ]
+
+    const body = allData.map((item, idx) => {
+      const usdPrice = useCalculatedRate && item.price_rmb
+        ? Math.ceil(item.price_rmb / exchangeRate.value)
+        : item.price_usd
+      return [
+        idx + 1,
+        item.equipment_name,
+        '', // 图片通过 didDrawCell 嵌入
+        item.specification || '',
+        item.factory_price ?? '',
+        usdPrice ?? '',
+        item.price_rmb ?? '',
+        item.equipment_dimensions || '',
+        item.wooden_frame_dimensions || '',
+        item.volume || '',
+        item.area || '',
+        item.standard_configuration || '',
+        item.remarks || '',
+        item.game_instructions || ''
+      ]
+    })
+
+    // 生成表格
+    autoTable(doc, {
+      head: [headers],
+      body,
+      startY: 64,
+      styles: {
+        fontSize: 7,
+        cellPadding: 2,
+        overflow: 'linebreak',
+        valign: 'middle',
+        lineColor: [220, 220, 220],
+        lineWidth: 0.3
+      },
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: 255,
+        fontStyle: 'bold',
+        halign: 'center',
+        fontSize: 7.5
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 22 },
+        1: { cellWidth: 80 },
+        2: { cellWidth: 30, halign: 'center' },
+        3: { cellWidth: 35, halign: 'center' },
+        4: { halign: 'right', cellWidth: 42 },
+        5: { halign: 'right', cellWidth: 38 },
+        6: { halign: 'right', cellWidth: 40 },
+        7: { cellWidth: 55 },
+        8: { cellWidth: 55 },
+        9: { cellWidth: 38 },
+        10: { cellWidth: 32 },
+        11: { cellWidth: 50 },
+        12: { cellWidth: 65 },
+        13: { cellWidth: 80 }
+      },
+      alternateRowStyles: { fillColor: [247, 250, 252] },
+      margin: { left: 20, right: 20 },
+      didDrawCell: (data) => {
+        // 在图片列（第3列，index=2）嵌入图片
+        if (data.section === 'body' && data.column.index === 2) {
+          const dataURL = imageMap.get(data.row.index)
+          if (dataURL) {
+            const x = data.cell.x + (data.cell.width - IMG_SIZE) / 2
+            const y = data.cell.y + (data.cell.height - IMG_SIZE) / 2
+            doc.addImage(dataURL, 'PNG', x, y, IMG_SIZE, IMG_SIZE)
+          }
+        }
+      }
+    })
+
+    // 添加页脚（页码）
+    const pageCount = doc.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.text(
+        `Page ${i} / ${pageCount}`,
+        doc.internal.pageSize.getWidth() / 2,
+        doc.internal.pageSize.getHeight() - 12,
+        { align: 'center' }
+      )
+    }
+
+    doc.save(`Qixun_PriceList_${new Date().toISOString().split('T')[0]}.pdf`)
+    ElMessage.success(`导出成功！共 ${allData.length} 条数据`)
+  } catch (err) {
+    ElMessage.error('导出失败: ' + (err.message || err))
+  } finally {
+    exportingPdf.value = false
     exportProgress.value = { loaded: 0, total: 0 }
   }
 }
