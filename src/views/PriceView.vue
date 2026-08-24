@@ -66,6 +66,10 @@
               </template>
               <template v-else>导出 Excel</template>
             </el-button>
+            <el-radio-group v-model="pdfPriceMode" size="small">
+              <el-radio-button value="usd">USD</el-radio-button>
+              <el-radio-button value="rmb">RMB</el-radio-button>
+            </el-radio-group>
           </div>
         </div>
       </div>
@@ -115,23 +119,23 @@
             {{ row.factory_price ? Number(row.factory_price).toLocaleString() : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="price_usd" label="Price(USD)" width="130" align="right">
+        <el-table-column prop="price_usd" label="Price" width="130" align="right">
           <template #default="{ row }">
             <template v-if="exchangeRate > 0 && row.price_rmb && calcDirection === 'forward'">
-              <span class="calculated-price">{{ Math.ceil(row.price_rmb / exchangeRate).toLocaleString() }}</span>
+              <span class="calculated-price">$ {{ Math.ceil(row.price_rmb / exchangeRate).toLocaleString() }}</span>
             </template>
             <template v-else>
-              {{ row.price_usd ? Number(row.price_usd).toLocaleString() : '-' }}
+              {{ row.price_usd ? '$ ' + Number(row.price_usd).toLocaleString() : '-' }}
             </template>
           </template>
         </el-table-column>
-        <el-table-column prop="price_rmb" label="Price(RMB)" width="130" align="right">
+        <el-table-column prop="price_rmb" label="Price" width="130" align="right">
           <template #default="{ row }">
             <template v-if="exchangeRate > 0 && row.price_usd && calcDirection === 'reverse'">
-              <span class="calculated-price">{{ Math.round(row.price_usd * exchangeRate).toLocaleString() }}</span>
+              <span class="calculated-price">¥ {{ Math.round(row.price_usd * exchangeRate).toLocaleString() }}</span>
             </template>
             <template v-else>
-              {{ row.price_rmb ? Number(row.price_rmb).toLocaleString() : '-' }}
+              {{ row.price_rmb ? '¥ ' + Number(row.price_rmb).toLocaleString() : '-' }}
             </template>
           </template>
         </el-table-column>
@@ -195,6 +199,7 @@ const setStatus = (type, text) => {
 // ========== 汇率 ==========
 const exchangeRate = ref(null)
 const calcDirection = ref('forward') // 'forward': USD=RMB/rate, 'reverse': RMB=USD*rate
+const pdfPriceMode = ref('usd') // PDF导出币种选择：'usd' | 'rmb'
 
 // ========== 筛选 ==========
 const searchName = ref('')
@@ -412,9 +417,23 @@ const exportExcel = async () => {
       { header: 'Game Instructions', key: 'instructions', width: 42 }
     ]
 
-    // 表头样式
-    const headerRow = ws.getRow(1)
-    headerRow.font = { bold: true, size: 11 }
+    // 在表头上方插入联系信息行
+    const contactLines = [
+      'WhatsApp: 008613049108027  WeChat: Qixun116688  Email: jadezeng0802@gmail.com',
+      'Add: Qixun Technology, GoldenShield Building, No.46, Shui Lian Avenue, Panyu District, Guangzhou City'
+    ]
+    // 从后往前插入，保证顺序正确
+    for (let i = contactLines.length - 1; i >= 0; i--) {
+      ws.spliceRows(1, 0, [contactLines[i]])
+      const r = ws.getRow(1)
+      r.getCell(1).font = { name: 'Arial', bold: true, size: 10 }
+      r.getCell(1).alignment = { vertical: 'middle' }
+      r.height = 18
+    }
+
+    // 表头样式（联系信息占2行，表头在第3行）
+    const headerRow = ws.getRow(3)
+    headerRow.font = { name: 'Arial', bold: true, size: 11 }
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' }
     headerRow.fill = {
       type: 'pattern',
@@ -460,10 +479,18 @@ const exportExcel = async () => {
       })
       // 序号列居中
       row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+      // 全局 Arial 字体，价格和尺寸列加粗
+      row.eachCell((cell) => {
+        cell.font = { name: 'Arial', size: 11 }
+      })
+      ;[5, 6, 7, 8, 9, 10].forEach(col => {
+        const cell = row.getCell(col)
+        cell.font = { name: 'Arial', size: 11, bold: true }
+      })
 
       // 记录有图片的行，稍后下载并嵌入
       if (item.image_url) {
-        imageTasks.push({ rowIndex: idx + 2, url: item.image_url })
+        imageTasks.push({ rowIndex: idx + 4, url: item.image_url })
       }
     })
 
@@ -556,13 +583,18 @@ const exportPDF = async () => {
 
     // 构建 HTML 表格
     const fmtPrice = (v) => v != null ? Number(v).toLocaleString() : ''
+    const isUSD = pdfPriceMode.value === 'usd'
     const rowsHTML = allData.map((item, idx) => {
-      const usdPrice = useCalculatedRate && item.price_rmb && calcDirection.value === 'forward'
-        ? Math.ceil(item.price_rmb / exchangeRate.value)
-        : item.price_usd
-      const rmbPrice = useCalculatedRate && item.price_usd && calcDirection.value === 'reverse'
-        ? Math.round(item.price_usd * exchangeRate.value)
-        : item.price_rmb
+      const usdPrice = isUSD ? (
+        useCalculatedRate && item.price_rmb && calcDirection.value === 'forward'
+          ? Math.ceil(item.price_rmb / exchangeRate.value)
+          : item.price_usd
+      ) : null
+      const rmbPrice = !isUSD ? (
+        useCalculatedRate && item.price_usd && calcDirection.value === 'reverse'
+          ? Math.round(item.price_usd * exchangeRate.value)
+          : item.price_rmb
+      ) : null
       const imgSrc = imageDataMap.get(idx) || ''
       const imgCell = imgSrc
         ? `<img src="${imgSrc}" style="width:40px;height:40px;object-fit:contain;display:block;margin:auto">`
@@ -572,8 +604,7 @@ const exportPDF = async () => {
         <td>${item.equipment_name || ''}</td>
         <td style="text-align:center">${imgCell}</td>
         <td style="text-align:center">${item.specification || ''}</td>
-        <td style="text-align:right">${fmtPrice(usdPrice)}</td>
-        <td style="text-align:right">${fmtPrice(rmbPrice)}</td>
+        <td style="text-align:right">${fmtPrice(isUSD ? usdPrice : rmbPrice)}</td>
         <td>${item.equipment_dimensions || ''}</td>
         <td>${item.wooden_frame_dimensions || ''}</td>
         <td>${item.volume || ''}</td>
@@ -587,8 +618,7 @@ const exportPDF = async () => {
     const html = `<table>
       <thead><tr>
         <th>#</th><th>Equipment Name</th><th>Equipment Images</th>
-        <th>Specification</th><th>Price(USD)</th>
-        <th>Price(RMB)</th><th>Equipment Dimensions</th>
+        <th>Specification</th><th>Price(${isUSD ? 'USD' : 'RMB'})</th><th>Equipment Dimensions</th>
         <th>Wooden frame dimensions</th><th>Volume</th><th>Area</th>
         <th>Standard configuration</th><th>Remarks</th><th>Game Instructions</th>
       </tr></thead>
@@ -597,15 +627,19 @@ const exportPDF = async () => {
 
     // 创建临时容器（z-index负值隐藏在底层，不用visibility:hidden以免html2canvas渲染空白）
     const container = document.createElement('div')
-    container.style.cssText = 'position:fixed;top:0;left:0;z-index:-10000;width:1600px;background:#fff;padding:16px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif'
+    container.style.cssText = 'position:fixed;top:0;left:0;z-index:-10000;width:1600px;background:#fff;padding:16px;font-family:Arial,sans-serif'
     document.body.appendChild(container)
     container.innerHTML = html
 
     // 设置表格样式
     const table = container.querySelector('table')
-    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px'
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px;table-layout:auto'
     container.querySelectorAll('th, td').forEach(cell => {
       cell.style.cssText += ';border:1px solid #ddd;padding:5px 6px;vertical-align:middle'
+    })
+    // 价格和尺寸列加粗（第5列为Price，第6-9列为Dimensions/Volume/Area）
+    container.querySelectorAll('td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(8), td:nth-child(9)').forEach(td => {
+      td.style.fontWeight = 'bold'
     })
     container.querySelectorAll('th').forEach(th => {
       th.style.cssText += ';background:#2980b9;color:#fff;font-weight:600;text-align:center;font-size:11px'
@@ -654,7 +688,7 @@ const exportPDF = async () => {
     const pageW = doc.internal.pageSize.getWidth()   // 297mm
     const pageH = doc.internal.pageSize.getHeight()  // 210mm
     const marginX = 6
-    const marginTop = 16
+    const marginTop = 25
     const marginBtm = 10
     const contentW = pageW - marginX * 2  // 285mm
 
@@ -662,10 +696,18 @@ const exportPDF = async () => {
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
     doc.text('Qixun Technology Price List', pageW / 2, 9, { align: 'center' })
+
+    // 联系信息（标题下方，表格上方）
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 0, 0)
+    doc.text('WhatsApp: 008613049108027  WeChat: Qixun116688  Email: jadezeng0802@gmail.com', marginX, 15)
+    doc.text('Add: Qixun Technology, GoldenShield Building, No.46, Shui Lian Avenue, Panyu District, Guangzhou City', marginX, 20)
+
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(130, 130, 130)
-    doc.text(`Date: ${new Date().toISOString().split('T')[0]}`, pageW / 2, 14, { align: 'center' })
+    doc.text(`Date: ${new Date().toISOString().split('T')[0]}`, pageW / 2, 25, { align: 'center' })
     doc.setTextColor(0, 0, 0)
 
     // 计算每页在 canvas 中可容纳的像素高度
@@ -712,6 +754,7 @@ const exportPDF = async () => {
       // 页码
       doc.setFontSize(7)
       doc.setTextColor(160, 160, 160)
+      doc.setFont('helvetica', 'normal')
       doc.text(`Page ${i + 1} / ${totalPages.length}`, pageW / 2, pageH - 4, { align: 'center' })
     }
 
