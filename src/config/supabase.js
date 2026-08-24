@@ -7,6 +7,7 @@ export const TABLE_NAME = 'client_info'
 export const SOURCE_TABLE_NAME = 'source_options'
 export const HOLIDAY_TABLE_NAME = 'holiday_data'
 export const PRICE_TABLE_NAME = 'product_prices'
+export const IMAGE_BUCKET_NAME = 'qixun-products'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {

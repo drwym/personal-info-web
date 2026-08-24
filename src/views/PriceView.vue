@@ -158,7 +158,7 @@ import { Download, Search, Picture, Loading } from '@element-plus/icons-vue'
 import ExcelJS from 'exceljs'
 import { jsPDF } from 'jspdf'
 import html2canvas from 'html2canvas'
-import { supabase, PRICE_TABLE_NAME } from '../config/supabase'
+import { supabase, PRICE_TABLE_NAME, IMAGE_BUCKET_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
 import PageHeader from '../components/PageHeader.vue'
 
@@ -201,9 +201,9 @@ const total = ref(0)
  * 从数据库行映射到表格行数据
  * 字段对应关系（基于 Excel 第3行标题）：
  *   equipment_name       → Equipment Name
- *   image_url            → Equipment Images（CDN 链接，表格暂不显示）
+ *   image_url            → Equipment Images（由产品名 + .jpeg 通过 Supabase Storage 生成临时签名 URL）
  *   specification        → Specification
- *   factory_price        → Factory Price 6.75
+ *   factory_price        → Factory Price
  *   price_usd            → Price(USD)
  *   price_rmb            → Price(RMB)
  *   equipment_dimensions → Equipment Dimensions
@@ -214,10 +214,35 @@ const total = ref(0)
  *   remarks              → Remarks
  *   game_instructions    → Game Instructions
  */
-const mapFromDB = (row) => ({
+
+/** 缓存 bucket 中的文件名集合，避免重复 list 请求 */
+let imageFileSet = null
+const loadImageFileSet = async () => {
+  if (imageFileSet) return imageFileSet
+  const { data } = await supabase.storage.from(IMAGE_BUCKET_NAME).list('', { limit: 1000 })
+  imageFileSet = new Set((data || []).map(f => f.name))
+  return imageFileSet
+}
+
+/** 根据产品名生成 Supabase Storage 临时签名 URL（兼容 jpeg/png） */
+const getProductImageUrl = async (equipmentName) => {
+  if (!equipmentName) return ''
+  const fileSet = await loadImageFileSet()
+  for (const ext of ['jpeg', 'png']) {
+    const fileName = `${equipmentName}.${ext}`
+    if (!fileSet.has(fileName)) continue
+    const { data } = await supabase.storage
+      .from(IMAGE_BUCKET_NAME)
+      .createSignedUrl(fileName, 3600)
+    if (data?.signedUrl) return data.signedUrl
+  }
+  return ''
+}
+
+const mapFromDB = async (row) => ({
   id: row.id,
   equipment_name: row.equipment_name || '',
-  image_url: row.image_url || '',
+  image_url: await getProductImageUrl(row.equipment_name),
   specification: row.specification || '',
   factory_price: row.factory_price,
   price_usd: row.price_usd,
@@ -253,7 +278,7 @@ const fetchPage = async () => {
     const to = from + pageSize.value - 1
     const { data, error, count } = await buildQuery().range(from, to)
     if (error) throw error
-    tableData.value = (data || []).map(mapFromDB)
+    tableData.value = await Promise.all((data || []).map(mapFromDB))
     total.value = count || 0
     const totalPages = Math.max(1, Math.ceil(total.value / pageSize.value))
     if (currentPage.value > totalPages) {
@@ -304,7 +329,7 @@ const fetchAllData = async () => {
   q = q.order('id', { ascending: true })
   const { data, error } = await q
   if (error) throw error
-  return (data || []).map(mapFromDB)
+  return await Promise.all((data || []).map(mapFromDB))
 }
 
 /** 从 URL 获取图片 ArrayBuffer，失败返回 null */
