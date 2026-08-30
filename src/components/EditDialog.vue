@@ -22,7 +22,7 @@
             style="flex:1;"
             @change="$emit('update-country-code')"
           >
-            <el-option v-for="(code, c) in countryData" :key="c" :label="c" :value="c"></el-option>
+            <el-option v-for="(info, code) in countryData" :key="code" :label="info.name" :value="code"></el-option>
           </el-select>
           <el-input v-model="form.countryCode" placeholder="区号" readonly style="width:110px;"></el-input>
         </div>

@@ -63,6 +63,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { supabase, TABLE_NAME, SOURCE_TABLE_NAME } from '../config/supabase'
 import { countryData } from '../data/countryData'
+import { isoToCn } from '../utils/countryCodeMap'
 import { useAuth } from '../composables/useAuth'
 import { useResponsive } from '../composables/useResponsive'
 import PageHeader from '../components/PageHeader.vue'
@@ -134,6 +135,7 @@ const refreshing = ref(false)
 const mapFromDB = (row) => ({
   id: row.id,
   country: row.country || '',
+  countryName: isoToCn[row.country] || row.country || '',
   countryCode: row.country_code || '',
   time: row.follow_time || '',
   company: row.company || '',
@@ -236,7 +238,7 @@ const form = reactive({
 })
 
 const updateCountryCode = () => {
-  form.countryCode = countryData[form.country] || ''
+  form.countryCode = countryData[form.country]?.phone || ''
 }
 
 watch(() => form.isOrdered, (newValue) => {
@@ -331,7 +333,7 @@ const submitAddData = async () => {
   submitLoading.value = true
   fullscreenLoading.value = true
   try {
-    const country = form.country.trim()
+    const country = form.country.trim() // ISO 代码
     const countryCode = form.countryCode.trim()
     const time = formatDate(form.time)
     const company = form.company.trim()
@@ -426,7 +428,7 @@ const exportExcel = async () => {
     if (all.length === 0) { ElMessage.warning('当前筛选条件下没有数据！'); return }
     const excelRows = [['序号', '国家', '区号', '跟进时间', '公司', '客户名', '用户编码', '联系方式', '来源', '状态', '下单', '备注']]
     all.forEach((item, index) => {
-      excelRows.push([index + 1, item.country, item.countryCode || '', item.time, item.company, item.clientName, item.userCode || '', item.phone || '', item.source || '', item.status, item.ord || '', item.remarks])
+      excelRows.push([index + 1, item.countryName || item.country, item.countryCode || '', item.time, item.company, item.clientName, item.userCode || '', item.phone || '', item.source || '', item.status, item.ord || '', item.remarks])
     })
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet(excelRows)

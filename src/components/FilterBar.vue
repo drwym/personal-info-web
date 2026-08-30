@@ -43,7 +43,7 @@
           <el-option
             v-for="c in countryList"
             :key="c"
-            :label="c"
+            :label="isoToCn[c] || c"
             :value="c"
           ></el-option>
         </el-select>
@@ -77,6 +77,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { isoToCn } from '../utils/countryCodeMap'
 
 const props = defineProps({
   currentFilters: Object,

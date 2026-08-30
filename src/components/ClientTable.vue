@@ -28,7 +28,7 @@
         <el-table-column label="国家" prop="country" :min-width="isMobile ? 80 : 110" align="center" class-name="col-country" header-align="center">
           <template #default="{ row }">
             <div :class="getCountryClass(row.status)">
-              {{ row.country }}
+              {{ row.countryName || row.country }}
               <div class="country-code-sub">({{ row.countryCode || '' }})</div>
             </div>
           </template>
