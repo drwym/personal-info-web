@@ -38,7 +38,13 @@
     </div>
 
     <!-- 错误提示 -->
-    <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="calendar-error" />
+    <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="calendar-error">
+      <template #default>
+        <el-button size="small" type="danger" plain @click="retryLoad" style="margin-top: 8px;">
+          重新加载
+        </el-button>
+      </template>
+    </el-alert>
 
     <!-- 日历网格 -->
     <div class="calendar-grid">
@@ -198,6 +204,10 @@ const goToday = () => {
   const today = new Date()
   currentYear.value = today.getFullYear()
   currentMonth.value = today.getMonth() + 1
+}
+
+const retryLoad = () => {
+  loadHolidays(currentYear.value, currentMonth.value, selectedCountries.value)
 }
 
 const onCountryChange = () => {

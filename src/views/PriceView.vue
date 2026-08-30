@@ -1,12 +1,9 @@
 <template>
-  <div v-loading.fullscreen.lock="fullscreenLoading" element-loading-text="正在从云端加载数据...">
+  <div v-loading.fullscreen.lock="initialLoading" element-loading-text="正在从云端加载数据...">
     <PageHeader
       title="启迅价格表"
       :status-text="statusText"
       :status-tag-type="statusTagType"
-      :display-username="displayUsername"
-      @back="$router.push('/')"
-      @logout="handleLogout"
     />
 
     <div class="price-content">
@@ -164,15 +161,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Search, Picture, Loading } from '@element-plus/icons-vue'
-import ExcelJS from 'exceljs'
-import { jsPDF } from 'jspdf'
-import html2canvas from 'html2canvas'
 import { supabase, PRICE_TABLE_NAME, IMAGE_BUCKET_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
+import { useStatus } from '../composables/useStatus'
 import PageHeader from '../components/PageHeader.vue'
 
 const router = useRouter()
@@ -180,24 +175,18 @@ const router = useRouter()
 // ========== Composables ==========
 const {
   currentUser,
-  displayUsername,
-  fullscreenLoading,
-  handleLogout
+  fullscreenLoading
 } = useAuth()
 
+const { statusText, statusTagType, setStatus } = useStatus()
+
 // ========== 状态 ==========
-const statusText = ref('连接中...')
-const statusTagType = ref('info')
+const initialLoading = ref(true)   // 首次全屏 loading
 
-const setStatus = (type, text) => {
-  statusText.value = text
-  if (type === 'ready') statusTagType.value = 'success'
-  else if (type === 'error') statusTagType.value = 'danger'
-  else statusTagType.value = 'info'
-}
-
-// ========== 汇率 ==========
-const exchangeRate = ref(null)
+// ========== 汇率（持久化到 localStorage） ==========
+const savedRate = (() => { try { return parseFloat(localStorage.getItem('price-exchange-rate')) || null } catch { return null } })()
+const exchangeRate = ref(savedRate)
+watch(exchangeRate, (val) => { if (val) localStorage.setItem('price-exchange-rate', String(val)); else localStorage.removeItem('price-exchange-rate') })
 const calcDirection = ref('forward') // 'forward': USD=RMB/rate, 'reverse': RMB=USD*rate
 const pdfPriceMode = ref('usd') // PDF导出币种选择：'usd' | 'rmb'
 
@@ -385,6 +374,7 @@ const exportExcel = async () => {
   exportingExcel.value = true
   exportProgress.value = { loaded: 0, total: 0 }
   try {
+    const ExcelJS = (await import('exceljs')).default
     const allData = await fetchAllData()
     if (allData.length === 0) {
       ElMessage.warning('没有可导出的数据！')
@@ -553,6 +543,10 @@ const exportPDF = async () => {
   exportingPdf.value = true
   exportProgress.value = { loaded: 0, total: 0 }
   try {
+    const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+      import('jspdf'),
+      import('html2canvas')
+    ])
     const allData = await fetchAllData()
     if (allData.length === 0) {
       ElMessage.warning('没有可导出的数据！')
@@ -781,6 +775,8 @@ onMounted(async () => {
     console.error('加载价格数据失败:', e)
     ElMessage.error('数据加载失败：' + (e.message || e))
     setStatus('error', '加载失败')
+  } finally {
+    initialLoading.value = false
     fullscreenLoading.value = false
   }
 })

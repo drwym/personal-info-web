@@ -13,11 +13,13 @@
     <div class="auth-error">{{ error }}</div>
     <el-form :model="form" label-position="top" size="large">
       <el-form-item>
-        <el-input v-model="form.email" placeholder="邮箱" type="email" autocomplete="email"></el-input>
+        <el-input v-model="form.email" placeholder="邮箱" type="email" autocomplete="email"
+                  @keyup.enter="$refs.pwdInput?.focus()"></el-input>
       </el-form-item>
       <el-form-item>
-        <el-input v-model="form.password" placeholder="密码（至少6位）" type="password"
-                  autocomplete="current-password" show-password></el-input>
+        <el-input ref="pwdInput" v-model="form.password" placeholder="密码（至少6位）" type="password"
+                  autocomplete="current-password" show-password
+                  @keyup.enter="$emit('login')"></el-input>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" style="width:100%;" :loading="loading" @click="$emit('login')">
@@ -37,4 +39,7 @@ defineProps({
   isMobile: Boolean
 })
 defineEmits(['login', 'update:visible'])
+
+import { ref } from 'vue'
+const pwdInput = ref(null)
 </script>

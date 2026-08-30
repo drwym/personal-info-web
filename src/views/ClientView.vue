@@ -1,12 +1,9 @@
 <template>
-  <div v-loading.fullscreen.lock="fullscreenLoading" element-loading-text="正在从云端加载数据...">
+  <div v-loading.fullscreen.lock="initialLoading" element-loading-text="正在从云端加载数据...">
     <PageHeader
       title="客户信息表"
       :status-text="statusText"
       :status-tag-type="statusTagType"
-      :display-username="displayUsername"
-      @back="$router.push('/')"
-      @logout="handleLogout"
     />
 
     <FilterBar
@@ -29,11 +26,13 @@
       @selection-change="handleSelectionChange"
       @show-remark="showRemarkInfo"
       @edit="openModal"
+      @add="openModal()"
       @page-change="handleCurrentChange"
       @size-change="handleSizeChange"
     />
 
     <ActionBar
+      :has-selection="selectedRows.length > 0"
       @batch-delete="batchDelete"
       @export-excel="exportExcel"
       @export-data="exportData"
@@ -61,11 +60,14 @@
 import { ref, reactive, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { supabase, TABLE_NAME, SOURCE_TABLE_NAME } from '../config/supabase'
+import { supabase, TABLE_NAME } from '../config/supabase'
 import { countryData } from '../data/countryData'
 import { isoToCn } from '../utils/countryCodeMap'
+import { formatDate, parseDateForInput, todayISO } from '../utils/dateFormat'
 import { useAuth } from '../composables/useAuth'
 import { useResponsive } from '../composables/useResponsive'
+import { useStatus } from '../composables/useStatus'
+import { useSourceOptions } from '../composables/useSourceOptions'
 import PageHeader from '../components/PageHeader.vue'
 import FilterBar from '../components/FilterBar.vue'
 import ClientTable from '../components/ClientTable.vue'
@@ -75,54 +77,35 @@ import EditDialog from '../components/EditDialog.vue'
 const router = useRouter()
 
 // ========== Composables ==========
-const {
-  currentUser, displayUsername,
-  fullscreenLoading, bootReady,
-  handleLogout, showAuthPage, withTimeout
-} = useAuth()
-
-const {
-  isMobile, tableRef, pageSizes,
-  relayoutTable, setupResponsive, cleanupResponsive
-} = useResponsive()
+const { currentUser, fullscreenLoading, bootReady, withTimeout } = useAuth()
+const { isMobile, tableRef, pageSizes, relayoutTable, setupResponsive, cleanupResponsive } = useResponsive()
+const { statusText, statusTagType, setStatus } = useStatus()
+const { sourceList, fetchSourceOptions } = useSourceOptions()
 
 // ========== 状态 ==========
-const statusText = ref('连接中...')
-const statusTagType = ref('info')
-
-const setStatus = (type, text) => {
-  statusText.value = text
-  if (type === 'ready') statusTagType.value = 'success'
-  else if (type === 'error') statusTagType.value = 'danger'
-  else statusTagType.value = 'info'
-}
-
-// ========== 来源管理 ==========
-const sourceList = ref([])
-const sourceLoading = ref(false)
-
-const fetchSourceOptions = async () => {
-  if (!supabase || !currentUser.value) return
-  try {
-    const { data, error } = await supabase
-      .from(SOURCE_TABLE_NAME)
-      .select('id, name, sort_order')
-      .or(`is_global.eq.true,user_id.eq.${currentUser.value.id}`)
-      .order('sort_order', { ascending: true })
-    if (error) throw error
-    const items = (data || []).map(r => ({
-      id: r.id, name: r.name, sortOrder: r.sort_order || 0, isGlobal: r.is_global === true
-    }))
-    sourceList.value = items.map(o => o.name)
-  } catch (err) {
-    console.error('加载来源选项失败:', err)
-  }
-}
+const initialLoading = ref(true)   // 首次全屏 loading
+const countryList = computed(() => Object.keys(countryData))
 
 // ========== 数据加载（服务端分页） ==========
 const pageData = ref([])
-const currentFilters = reactive({ status: 'all', source: 'all', country: 'all', userCode: '' })
-const countryList = computed(() => Object.keys(countryData))
+
+// 从 sessionStorage 恢复筛选条件
+const restoreFilters = () => {
+  try {
+    const saved = sessionStorage.getItem('client-filters')
+    if (saved) return JSON.parse(saved)
+  } catch {}
+  return null
+}
+
+const savedFilters = restoreFilters()
+const currentFilters = reactive(savedFilters || { status: 'all', source: 'all', country: 'all', userCode: '' })
+
+// 持久化筛选条件
+watch(currentFilters, (val) => {
+  sessionStorage.setItem('client-filters', JSON.stringify(val))
+}, { deep: true })
+
 const pagination = reactive({
   currentPage: 1,
   pageSize: isMobile.value ? 10 : 20,
@@ -196,20 +179,21 @@ const fetchPage = async () => {
 const refreshData = async (silent = false) => {
   if (!supabase || !currentUser.value) {
     if (!silent) ElMessage.warning('请先登录')
-    fullscreenLoading.value = false
     return false
   }
   if (refreshing.value) return false
   refreshing.value = true
-  if (silent && !fullscreenLoading.value) fullscreenLoading.value = true
+  // 仅首次加载使用全屏 loading，刷新只用表格 loading
+  if (initialLoading.value) fullscreenLoading.value = true
   try {
     pagination.currentPage = 1
-    await fetchSourceOptions()
+    await fetchSourceOptions(currentUser.value.id)
     const ok = await fetchPage()
     if (ok && !silent) ElMessage.success('数据已刷新')
     return ok
   } finally {
     refreshing.value = false
+    initialLoading.value = false
     fullscreenLoading.value = false
   }
 }
@@ -257,24 +241,10 @@ watch(() => form.isOrdered, (newValue) => {
 
 const resetForm = () => {
   form.country = ''; form.countryCode = ''
-  form.time = new Date().toISOString().split('T')[0]
+  form.time = todayISO()
   form.company = ''; form.clientName = ''; form.userCode = ''; form.phone = ''
   form.source = ''; form.status = '重点跟进'; form.remarks = ''; form.isOrdered = false
   originalStatus.value = ''
-}
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return ''
-  const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (m) return `${m[1]}年${parseInt(m[2])}月${parseInt(m[3])}日`
-  return dateStr
-}
-
-const parseDateForInput = (dateStr) => {
-  if (!dateStr) return ''
-  const m = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
-  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
-  return dateStr
 }
 
 const openModal = async (id = null) => {
@@ -331,9 +301,9 @@ const submitAddData = async () => {
     ElMessage.warning('请至少填写【国家】和【跟进时间】！'); return
   }
   submitLoading.value = true
-  fullscreenLoading.value = true
+  // 提交时仅弹窗 loading，不锁全屏
   try {
-    const country = form.country.trim() // ISO 代码
+    const country = form.country.trim()
     const countryCode = form.countryCode.trim()
     const time = formatDate(form.time)
     const company = form.company.trim()
@@ -362,7 +332,6 @@ const submitAddData = async () => {
     ElMessage.error('保存失败: ' + err.message)
   } finally {
     submitLoading.value = false
-    fullscreenLoading.value = false
   }
 }
 
@@ -378,7 +347,8 @@ const batchDelete = async () => {
       `确定要删除选中的 ${selectedRows.value.length} 条客户数据吗？此操作不可撤销！`,
       '批量删除确认', { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning' }
     )
-    fullscreenLoading.value = true
+    // 删除时仅表格 loading，不锁全屏
+    loadingPage.value = true
     const ids = selectedRows.value.map(r => r.id)
     const { error } = await supabase.from(TABLE_NAME).delete().in('id', ids)
     if (error) throw error
@@ -389,7 +359,7 @@ const batchDelete = async () => {
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('删除失败: ' + (err.message || err))
   } finally {
-    fullscreenLoading.value = false
+    loadingPage.value = false
   }
 }
 
@@ -517,7 +487,6 @@ onMounted(async () => {
     nextTick(() => fetchPage())
   })
 
-  // 进入页面时加载数据
   if (currentUser.value) {
     try {
       await refreshData(true)
@@ -525,9 +494,13 @@ onMounted(async () => {
       console.error('加载数据失败:', e)
       ElMessage.error('数据加载失败：' + (e.message || e))
       setStatus('error', '加载失败')
+      initialLoading.value = false
       fullscreenLoading.value = false
       loadingPage.value = false
     }
+  } else {
+    initialLoading.value = false
+    fullscreenLoading.value = false
   }
 })
 

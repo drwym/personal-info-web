@@ -1,11 +1,6 @@
 <template>
   <div v-loading.fullscreen.lock="fullscreenLoading" element-loading-text="正在从云端加载数据...">
-    <PageHeader
-      title="来源配置"
-      :display-username="displayUsername"
-      @back="$router.push('/')"
-      @logout="handleLogout"
-    />
+    <PageHeader title="来源配置" />
 
     <el-card shadow="never" style="margin-top: 16px;">
       <div class="source-toolbar">
@@ -64,41 +59,18 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { supabase, SOURCE_TABLE_NAME } from '../config/supabase'
 import { useAuth } from '../composables/useAuth'
 import { useResponsive } from '../composables/useResponsive'
+import { useSourceOptions } from '../composables/useSourceOptions'
 import PageHeader from '../components/PageHeader.vue'
 import SourceFormDialog from '../components/SourceFormDialog.vue'
 
-const {
-  currentUser, displayUsername,
-  fullscreenLoading,
-  handleLogout
-} = useAuth()
-
+const { currentUser, fullscreenLoading } = useAuth()
 const { isMobile } = useResponsive()
+const { sourceOptions, sourceLoading, fetchSourceOptions } = useSourceOptions()
 
-// ========== 来源管理 ==========
-const sourceLoading = ref(false)
+// ========== 来源表单 ==========
 const sourceFormVisible = ref(false)
 const sourceEditingId = ref(null)
 const sourceFormName = ref('')
-const sourceOptions = ref([])
-
-const fetchSourceOptions = async () => {
-  if (!supabase || !currentUser.value) return
-  try {
-    const { data, error } = await supabase
-      .from(SOURCE_TABLE_NAME)
-      .select('id, name, sort_order')
-      .or(`is_global.eq.true,user_id.eq.${currentUser.value.id}`)
-      .order('sort_order', { ascending: true })
-    if (error) throw error
-    const items = (data || []).map(r => ({
-      id: r.id, name: r.name, sortOrder: r.sort_order || 0, isGlobal: r.is_global === true
-    }))
-    sourceOptions.value = items
-  } catch (err) {
-    console.error('加载来源选项失败:', err)
-  }
-}
 
 const openSourceForm = (item = null) => {
   if (item) {
@@ -134,7 +106,7 @@ const submitSourceForm = async () => {
     sourceFormVisible.value = false
     sourceEditingId.value = null
     sourceFormName.value = ''
-    await fetchSourceOptions()
+    await fetchSourceOptions(currentUser.value.id)
   } catch (err) {
     ElMessage.error('操作失败: ' + (err.message || err))
   } finally {
@@ -151,7 +123,7 @@ const deleteSourceOption = async (item) => {
     const { error } = await supabase.from(SOURCE_TABLE_NAME).delete().eq('id', item.id)
     if (error) throw error
     ElMessage.success('删除成功')
-    await fetchSourceOptions()
+    await fetchSourceOptions(currentUser.value.id)
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('删除失败: ' + (err.message || err))
   } finally {
@@ -162,7 +134,7 @@ const deleteSourceOption = async (item) => {
 // ========== 生命周期 ==========
 onMounted(async () => {
   if (currentUser.value) {
-    await fetchSourceOptions()
+    await fetchSourceOptions(currentUser.value.id)
   }
 })
 </script>

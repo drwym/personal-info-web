@@ -2,11 +2,8 @@
   <div class="home-page">
     <PageHeader
       title="个人中心"
-      :show-back="false"
       :status-text="statusText"
       :status-tag-type="statusTagType"
-      :display-username="displayUsername"
-      @logout="$emit('logout')"
     />
 
     <div class="home-cards">
@@ -32,15 +29,10 @@
 </template>
 
 <script setup>
+import { useStatus } from '../composables/useStatus'
 import PageHeader from '../components/PageHeader.vue'
 
-defineProps({
-  statusText: String,
-  statusTagType: String,
-  displayUsername: String
-})
-
-defineEmits(['logout'])
+const { statusText, statusTagType } = useStatus('已连接', 'ready')
 
 const menuItems = [
   {

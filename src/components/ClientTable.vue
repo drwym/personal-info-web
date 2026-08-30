@@ -13,6 +13,14 @@
         empty-text="暂无客户数据"
         @selection-change="$emit('selection-change', $event)"
       >
+        <!-- 空状态 -->
+        <template #empty>
+          <el-empty description="暂无客户数据">
+            <el-button type="primary" size="small" @click="$emit('add')">
+              <el-icon><Plus /></el-icon> 添加第一条数据
+            </el-button>
+          </el-empty>
+        </template>
         <!-- 1. 复选框 -->
         <el-table-column type="selection" :width="isMobile ? 38 : 50" align="center"></el-table-column>
         <!-- 2. 序号 -->
@@ -105,7 +113,7 @@ const props = defineProps({
 const innerTable = ref(null)
 defineExpose({ innerTable })
 
-const emit = defineEmits(['selection-change', 'show-remark', 'edit', 'page-change', 'size-change'])
+const emit = defineEmits(['selection-change', 'show-remark', 'edit', 'page-change', 'size-change', 'add'])
 
 const pagerLayout = computed(() => 'sizes, prev, pager, next')
 

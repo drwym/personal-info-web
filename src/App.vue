@@ -11,8 +11,20 @@
       @update:visible="authDialogVisible = $event"
     />
 
-    <!-- 路由视图 -->
-    <router-view v-if="currentUser" />
+    <!-- 全局导航栏（登录后显示） -->
+    <AppNavbar
+      v-if="currentUser"
+      :display-username="displayUsername"
+      :is-mobile="isMobile"
+      @logout="handleLogout"
+    />
+
+    <!-- 路由视图（带过渡动画） -->
+    <router-view v-if="currentUser" v-slot="{ Component, route }">
+      <Transition name="page-fade" mode="out-in">
+        <component :is="Component" :key="route.path" />
+      </Transition>
+    </router-view>
   </div>
 </template>
 
@@ -23,12 +35,13 @@ import { ElMessage } from 'element-plus'
 import { useAuth } from './composables/useAuth'
 import { useResponsive } from './composables/useResponsive'
 import AuthDialog from './components/AuthDialog.vue'
+import AppNavbar from './components/AppNavbar.vue'
 
 const router = useRouter()
 
 // ========== Composables ==========
 const {
-  currentUser,
+  currentUser, displayUsername,
   authDialogVisible, authLoading, authError, authForm,
   bootReady,
   handleAuth,
@@ -82,3 +95,17 @@ onBeforeUnmount(() => {
   cleanupResponsive()
 })
 </script>
+
+<style>
+/* 页面切换过渡动画 */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.page-fade-enter-from {
+  opacity: 0;
+}
+.page-fade-leave-to {
+  opacity: 0;
+}
+</style>

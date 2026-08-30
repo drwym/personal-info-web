@@ -11,11 +11,6 @@
         </el-tag>
       </h1>
     </div>
-    <div class="user-info">
-      <el-avatar :size="32" style="background:#409eff;">{{ (displayUsername || 'U').charAt(0).toUpperCase() }}</el-avatar>
-      <span>欢迎，<span class="username">{{ displayUsername }}</span></span>
-      <el-button size="small" type="danger" plain @click="$emit('logout')">退出登录</el-button>
-    </div>
   </div>
 </template>
 
@@ -23,18 +18,17 @@
 defineProps({
   title: {
     type: String,
-    default: '客户信息表'
+    default: ''
   },
   showBack: {
     type: Boolean,
-    default: true
+    default: false
   },
   statusText: String,
-  statusTagType: String,
-  displayUsername: String
+  statusTagType: String
 })
 
-const emit = defineEmits(['back', 'logout'])
+defineEmits(['back'])
 </script>
 
 <style scoped>

@@ -1,9 +1,14 @@
 <template>
   <div class="action-bar">
     <div class="left-group">
-      <el-button type="danger" @click="$emit('batch-delete')">
-        <el-icon><Delete /></el-icon> 批量删除
-      </el-button>
+      <el-tooltip
+        :content="hasSelection ? '删除已勾选的客户数据' : '请先在表格中勾选数据'"
+        placement="top"
+      >
+        <el-button type="danger" :disabled="!hasSelection" @click="$emit('batch-delete')">
+          <el-icon><Delete /></el-icon> 批量删除
+        </el-button>
+      </el-tooltip>
       <el-button type="primary" @click="$emit('export-excel')">
         <el-icon><Download /></el-icon> 导出Excel
       </el-button>
@@ -29,5 +34,9 @@
 </template>
 
 <script setup>
+defineProps({
+  hasSelection: { type: Boolean, default: false }
+})
+
 defineEmits(['batch-delete', 'export-excel', 'export-data', 'import-data', 'add'])
 </script>

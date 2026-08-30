@@ -32,14 +32,6 @@ html, body {
   color: #303133;
   margin: 0;
 }
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: #606266;
-}
-.user-info .username { font-weight: 600; color: #303133; }
 
 /* ========== 筛选卡片 ========== */
 .filter-card { margin-bottom: 16px; }
@@ -195,11 +187,9 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   #app { min-width: 0; }
 
   /* 页头 */
-  .page-header { flex-direction: column !important; align-items: stretch !important; gap: 10px; }
+  .page-header { flex-direction: column !important; align-items: flex-start !important; gap: 10px; }
   .page-title-left { flex-wrap: wrap; }
   .page-title { font-size: 18px !important; flex-wrap: wrap; }
-  .user-info { justify-content: space-between; width: 100%; }
-  .user-info .el-button { padding: 6px 10px; }
 
   /* 筛选卡片 */
   .filter-card .el-card__body { padding: 12px; }
@@ -325,6 +315,14 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .el-dialog .el-dialog__body { padding: 16px 14px; }
   .el-dialog .el-dialog__footer { padding: 10px 14px 16px; }
   .el-dialog .el-button { min-height: 40px; }
+
+  /* 移动端底部 TabBar 留白 */
+  .home-page,
+  .holiday-calendar-wrapper,
+  .price-content,
+  .table-card {
+    margin-bottom: 60px !important;
+  }
 
   /* 表格loading居中 */
   .cust-table .el-loading-mask { z-index: 10; }
@@ -526,5 +524,30 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .cust-table .el-table__header-wrapper th .cell,
   .cust-table .el-table__body-wrapper td .cell {
     font-size: 11px !important;
+  }
+}
+
+/* ========== 打印优化 ========== */
+@media print {
+  .app-navbar,
+  .action-bar,
+  .filter-card,
+  .pagination-wrapper,
+  .back-btn,
+  .el-loading-mask {
+    display: none !important;
+  }
+  html, body {
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  #app {
+    max-width: 100% !important;
+  }
+  .page-header {
+    margin-bottom: 12px !important;
+  }
+  .calendar-row-wrapper {
+    overflow-x: visible !important;
   }
 }
