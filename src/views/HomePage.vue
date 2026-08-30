@@ -15,9 +15,14 @@
       </el-alert>
 
       <!-- 用户信息卡片 -->
-      <el-card shadow="never" class="user-card">
+      <div class="user-card">
+        <div class="user-card-deco">
+          <div class="deco-circle c1"></div>
+          <div class="deco-circle c2"></div>
+          <div class="deco-circle c3"></div>
+        </div>
         <div class="user-card-inner">
-          <el-avatar :size="56" style="background:#409eff;flex-shrink:0;">
+          <el-avatar :size="52" class="user-avatar">
             {{ (displayUsername || 'U').charAt(0).toUpperCase() }}
           </el-avatar>
           <div class="user-meta">
@@ -25,80 +30,75 @@
             <div class="user-email">{{ currentUser?.email || '' }}</div>
           </div>
           <div class="user-badge">
-            <el-tag type="success" effect="plain" round>已登录</el-tag>
+            <el-tag type="success" effect="dark" round size="small">● 在线</el-tag>
           </div>
         </div>
-      </el-card>
+      </div>
 
       <!-- 统计数字卡片 -->
-      <el-row :gutter="16" class="stat-row">
-        <el-col :xs="12" :sm="6" v-for="item in statCards" :key="item.label">
-          <el-card shadow="never" class="stat-card" :body-style="{ padding: '20px 16px' }">
-            <div class="stat-icon" :style="{ background: item.bg }">
-              <el-icon :size="22" :color="item.color"><component :is="item.icon" /></el-icon>
+      <el-row :gutter="14" class="stat-row">
+        <el-col :xs="12" :sm="6" v-for="(item, idx) in statCards" :key="item.label">
+          <div class="stat-card" :style="{ '--accent': item.color, animationDelay: idx * 0.08 + 's' }">
+            <div class="stat-icon">
+              <el-icon :size="20"><component :is="item.icon" /></el-icon>
             </div>
             <div class="stat-value">{{ item.value }}</div>
             <div class="stat-label">{{ item.label }}</div>
-          </el-card>
+          </div>
         </el-col>
       </el-row>
 
       <!-- 数据分布区 -->
-      <el-row :gutter="16" class="dist-row">
+      <el-row :gutter="14" class="dist-row">
         <el-col :xs="24" :sm="12">
-          <el-card shadow="never" class="dist-card">
-            <template #header>
-              <span class="dist-title">🌍 国家 Top 5</span>
-            </template>
+          <div class="dist-card">
+            <div class="dist-header">
+              <span class="dist-header-icon">🌍</span>
+              <span class="dist-header-text">国家 Top 5</span>
+            </div>
             <div v-if="countryTop.length === 0" class="dist-empty">暂无数据</div>
             <div v-else class="dist-list">
               <div v-for="(item, idx) in countryTop" :key="item.code" class="dist-item">
-                <span class="dist-rank">{{ idx + 1 }}</span>
+                <span class="dist-rank" :class="'rank-' + (idx + 1)">{{ idx + 1 }}</span>
                 <span class="dist-name">{{ item.name }}</span>
-                <el-progress
-                  :percentage="Math.round((item.count / countryTop[0].count) * 100)"
-                  :stroke-width="14"
-                  :show-text="false"
-                  :color="barColors[idx]"
-                  style="flex:1;min-width:60px;"
-                />
+                <div class="dist-bar-track">
+                  <div class="dist-bar-fill" :style="{ width: Math.round((item.count / countryTop[0].count) * 100) + '%', background: barColors[idx] }"></div>
+                </div>
                 <span class="dist-count">{{ item.count }}</span>
               </div>
             </div>
-          </el-card>
+          </div>
         </el-col>
         <el-col :xs="24" :sm="12">
-          <el-card shadow="never" class="dist-card">
-            <template #header>
-              <span class="dist-title">📌 来源 Top 5</span>
-            </template>
+          <div class="dist-card">
+            <div class="dist-header">
+              <span class="dist-header-icon">📌</span>
+              <span class="dist-header-text">来源 Top 5</span>
+            </div>
             <div v-if="sourceTop.length === 0" class="dist-empty">暂无数据</div>
             <div v-else class="dist-list">
               <div v-for="(item, idx) in sourceTop" :key="item.name" class="dist-item">
-                <span class="dist-rank">{{ idx + 1 }}</span>
+                <span class="dist-rank" :class="'rank-' + (idx + 1)">{{ idx + 1 }}</span>
                 <span class="dist-name">{{ item.name || '未分类' }}</span>
-                <el-progress
-                  :percentage="Math.round((item.count / sourceTop[0].count) * 100)"
-                  :stroke-width="14"
-                  :show-text="false"
-                  :color="barColors[idx]"
-                  style="flex:1;min-width:60px;"
-                />
+                <div class="dist-bar-track">
+                  <div class="dist-bar-fill" :style="{ width: Math.round((item.count / sourceTop[0].count) * 100) + '%', background: barColors[idx] }"></div>
+                </div>
                 <span class="dist-count">{{ item.count }}</span>
               </div>
             </div>
-          </el-card>
+          </div>
         </el-col>
       </el-row>
 
       <!-- 最近添加客户 -->
-      <el-card shadow="never" class="recent-card">
-        <template #header>
-          <div class="recent-header">
-            <span class="dist-title">🕐 最近添加</span>
-            <el-button link type="primary" @click="$router.push('/clients')">查看全部 →</el-button>
+      <div class="recent-card">
+        <div class="recent-header">
+          <div class="recent-header-left">
+            <span class="dist-header-icon">🕐</span>
+            <span class="dist-header-text">最近添加</span>
           </div>
-        </template>
+          <el-button link type="primary" @click="$router.push('/clients')">查看全部 →</el-button>
+        </div>
         <div v-if="recentList.length === 0" class="dist-empty">暂无客户数据</div>
         <el-table v-else :data="recentList" size="small" :show-header="true" style="width:100%;">
           <el-table-column prop="userCode" label="编码" width="80" />
@@ -114,7 +114,7 @@
             </template>
           </el-table-column>
         </el-table>
-      </el-card>
+      </div>
     </div>
   </div>
 </template>
@@ -236,6 +236,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ========== 入场动画 ========== */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .dashboard-page {
   padding: 0;
 }
@@ -244,15 +250,68 @@ onMounted(() => {
   min-height: 60vh;
 }
 
-/* 用户信息卡片 */
+/* ========== 用户信息卡片 ========== */
 .user-card {
-  margin-bottom: 16px;
+  background: linear-gradient(135deg, #409eff 0%, #6366f1 50%, #8b5cf6 100%);
+  border-radius: 16px;
+  padding: 28px 24px;
+  margin-bottom: 20px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  animation: fadeSlideUp 0.5s ease both;
+}
+
+.user-card-deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.deco-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.deco-circle.c1 {
+  width: 180px;
+  height: 180px;
+  top: -60px;
+  right: -30px;
+}
+
+.deco-circle.c2 {
+  width: 120px;
+  height: 120px;
+  bottom: -40px;
+  right: 80px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.deco-circle.c3 {
+  width: 80px;
+  height: 80px;
+  top: -20px;
+  left: 40%;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .user-card-inner {
   display: flex;
   align-items: center;
   gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.user-avatar {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(4px);
 }
 
 .user-meta {
@@ -262,17 +321,18 @@ onMounted(() => {
 
 .user-greeting {
   font-size: 18px;
-  color: #303133;
+  color: rgba(255, 255, 255, 0.95);
   margin-bottom: 4px;
 }
 
 .user-greeting strong {
-  color: #409eff;
+  color: #fff;
+  font-weight: 700;
 }
 
 .user-email {
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.65);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -282,64 +342,137 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* 统计卡片 */
+.user-badge :deep(.el-tag) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
+
+/* ========== 统计卡片 ========== */
 .stat-row {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .stat-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px 16px 18px;
   text-align: center;
-  margin-bottom: 0;
-  cursor: default;
-  transition: box-shadow 0.2s;
+  border: 1px solid #eef0f4;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  animation: fadeSlideUp 0.5s ease both;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent, #409eff), color-mix(in srgb, var(--accent, #409eff) 60%, white));
+  border-radius: 12px 12px 0 0;
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent, #409eff) 6%, transparent), transparent);
+  pointer-events: none;
 }
 
 .stat-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: color-mix(in srgb, var(--accent, #409eff) 20%, #f0f2f5);
 }
 
 .stat-icon {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 12px;
+  background: color-mix(in srgb, var(--accent, #409eff) 10%, transparent);
+  color: var(--accent, #409eff);
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.08);
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #303133;
+  font-size: 32px;
+  font-weight: 800;
+  color: #1a1a2e;
   line-height: 1.2;
+  letter-spacing: -0.5px;
+  position: relative;
+  z-index: 1;
 }
 
 .stat-label {
   font-size: 13px;
-  color: #909399;
+  color: #8c8c8c;
   margin-top: 4px;
+  position: relative;
+  z-index: 1;
 }
 
-/* 分布区 */
+/* ========== 分布区 ========== */
 .dist-row {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .dist-card {
-  margin-bottom: 0;
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px;
+  border: 1px solid #eef0f4;
+  height: 100%;
+  transition: all 0.3s ease;
+  animation: fadeSlideUp 0.5s ease both;
 }
 
-.dist-title {
+.dist-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+.dist-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.dist-header-icon {
+  font-size: 18px;
+}
+
+.dist-header-text {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: #1a1a2e;
 }
 
 .dist-empty {
   text-align: center;
   color: #c0c4cc;
-  padding: 24px 0;
+  padding: 36px 0;
   font-size: 14px;
 }
 
@@ -352,65 +485,168 @@ onMounted(() => {
 .dist-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 4px 0;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.dist-item:hover {
+  background: #fafbfc;
 }
 
 .dist-rank {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   background: #f0f2f5;
-  color: #606266;
-  font-size: 12px;
-  font-weight: 600;
+  color: #8c8c8c;
+  font-size: 11px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
+.dist-rank.rank-1 {
+  background: linear-gradient(135deg, #fff7e6, #ffe7ba);
+  color: #d48806;
+  box-shadow: 0 2px 6px rgba(250, 173, 20, 0.15);
+}
+
+.dist-rank.rank-2 {
+  background: linear-gradient(135deg, #f0f5ff, #d6e4ff);
+  color: #2f54eb;
+  box-shadow: 0 2px 6px rgba(47, 84, 235, 0.1);
+}
+
+.dist-rank.rank-3 {
+  background: linear-gradient(135deg, #f6ffed, #d9f7be);
+  color: #389e0d;
+  box-shadow: 0 2px 6px rgba(82, 196, 26, 0.1);
+}
+
 .dist-name {
-  width: 70px;
+  width: 72px;
   flex-shrink: 0;
   font-size: 13px;
   color: #303133;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
+}
+
+.dist-bar-track {
+  flex: 1;
+  height: 10px;
+  background: #f5f7fa;
+  border-radius: 5px;
+  overflow: hidden;
+  min-width: 40px;
+}
+
+.dist-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 4px;
 }
 
 .dist-count {
   font-size: 13px;
-  font-weight: 600;
-  color: #606266;
+  font-weight: 700;
+  color: #303133;
   flex-shrink: 0;
-  min-width: 24px;
+  min-width: 28px;
   text-align: right;
 }
 
-/* 最近添加 */
+/* ========== 最近添加 ========== */
 .recent-card {
-  margin-bottom: 16px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px;
+  border: 1px solid #eef0f4;
+  margin-bottom: 20px;
+  animation: fadeSlideUp 0.5s ease both;
+  transition: all 0.3s ease;
+}
+
+.recent-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
 }
 
 .recent-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f2f5;
 }
 
-/* 移动端适配 */
+.recent-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 表格行悬停优化 */
+.recent-card :deep(.el-table) {
+  --el-table-row-hover-bg-color: #f5f7fa;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.recent-card :deep(.el-table th.el-table__cell) {
+  background: #fafbfc;
+  font-weight: 600;
+  font-size: 13px;
+  color: #606266;
+}
+
+.recent-card :deep(.el-table .el-table__body-wrapper) {
+  border-radius: 0 0 8px 8px;
+}
+
+/* ========== 移动端适配 ========== */
 @media (max-width: 768px) {
+  .user-card {
+    padding: 20px 16px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+
   .user-card-inner {
-    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .user-greeting {
     font-size: 16px;
   }
 
+  .deco-circle.c1 {
+    width: 120px;
+    height: 120px;
+    top: -40px;
+    right: -20px;
+  }
+
+  .deco-circle.c2 {
+    width: 80px;
+    height: 80px;
+    bottom: -30px;
+    right: 50px;
+  }
+
+  .deco-circle.c3 {
+    display: none;
+  }
+
   .stat-value {
-    font-size: 22px;
+    font-size: 26px;
   }
 
   .stat-icon {
@@ -419,9 +655,26 @@ onMounted(() => {
     margin-bottom: 8px;
   }
 
+  .stat-card {
+    padding: 16px 12px 14px;
+  }
+
+  .dist-card {
+    padding: 16px;
+    margin-bottom: 0;
+  }
+
   .dist-name {
     width: 56px;
     font-size: 12px;
+  }
+
+  .dist-bar-track {
+    height: 8px;
+  }
+
+  .recent-card {
+    padding: 16px;
   }
 }
 </style>
