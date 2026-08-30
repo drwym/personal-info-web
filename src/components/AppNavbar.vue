@@ -12,6 +12,7 @@
             router
             class="navbar-menu"
           >
+            <el-menu-item index="/">首页</el-menu-item>
             <el-menu-item index="/clients">客户信息</el-menu-item>
             <el-menu-item index="/calendar">国家日历</el-menu-item>
             <el-menu-item index="/sources">来源配置</el-menu-item>
@@ -86,6 +87,7 @@ const route = useRoute()
 const activeRoute = computed(() => route.path)
 
 const tabItems = [
+  { path: '/', label: '首页', icon: 'HomeFilled' },
   { path: '/clients', label: '客户', icon: 'Document' },
   { path: '/calendar', label: '日历', icon: 'Calendar' },
   { path: '/sources', label: '来源', icon: 'Setting' },
@@ -97,10 +99,10 @@ const titleMap = {
   '/calendar': '国家日历',
   '/sources': '来源配置',
   '/price': '价格表',
-  '/': '个人中心'
+  '/': '首页看板'
 }
 
-const currentTitle = computed(() => titleMap[route.path] || '个人中心')
+const currentTitle = computed(() => titleMap[route.path] || '首页看板')
 
 const handleUserCommand = (command) => {
   if (command === 'logout') emit('logout')
