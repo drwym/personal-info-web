@@ -9,22 +9,28 @@
     <div class="price-content">
       <div class="filter-bar">
         <div class="filter-row">
-          <span class="exchange-rate-label">汇率换算：</span>
+          <span class="exchange-rate-label">USD汇率：</span>
           <el-input
-            v-model.number="exchangeRate"
-            placeholder="输入汇率，如 6.75"
+            v-model.number="usdExchangeRate"
+            placeholder="美元价 = 工厂价 ÷ 汇率"
             style="width: 200px"
             clearable
             type="number"
             :step="0.01"
             :min="0"
           />
-          <el-radio-group v-model="calcDirection" size="small" style="margin-left: 8px">
-            <el-radio-button value="forward">USD = RMB ÷ 汇率</el-radio-button>
-            <el-radio-button value="reverse">RMB = USD × 汇率</el-radio-button>
-          </el-radio-group>
-          <span v-if="exchangeRate > 0" class="exchange-rate-hint">
-            {{ calcDirection === 'forward' ? `美元价 = 人民币价 ÷ ${exchangeRate}，向上取整` : `人民币价 = 美元价 × ${exchangeRate}` }}
+          <span class="exchange-rate-label" style="margin-left: 12px">RMB汇率：</span>
+          <el-input
+            v-model.number="rmbExchangeRate"
+            placeholder="人民币价 = 美元价 × 汇率"
+            style="width: 200px"
+            clearable
+            type="number"
+            :step="0.01"
+            :min="0"
+          />
+          <span v-if="usdExchangeRate > 0 || rmbExchangeRate > 0" class="exchange-rate-hint">
+            {{ usdExchangeRate > 0 ? `美元价 = 工厂价 ÷ ${usdExchangeRate}（向上取整）` : '' }}{{ usdExchangeRate > 0 && rmbExchangeRate > 0 ? '，' : '' }}{{ rmbExchangeRate > 0 ? `人民币价 = 美元价 × ${rmbExchangeRate}（向上取整）` : '' }}
           </span>
         </div>
         <div class="filter-row">
@@ -116,20 +122,20 @@
             {{ row.factory_price ? Number(row.factory_price).toLocaleString() : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="price_usd" label="Price" width="130" align="right">
+        <el-table-column prop="price_usd" label="Price(USD)" width="130" align="right">
           <template #default="{ row }">
-            <template v-if="exchangeRate > 0 && row.price_rmb && calcDirection === 'forward'">
-              <span class="calculated-price">$ {{ Math.ceil(row.price_rmb / exchangeRate).toLocaleString() }}</span>
+            <template v-if="usdExchangeRate > 0 && row.factory_price">
+              <span class="calculated-price">$ {{ Math.ceil(row.factory_price / usdExchangeRate).toLocaleString() }}</span>
             </template>
             <template v-else>
               {{ row.price_usd ? '$ ' + Number(row.price_usd).toLocaleString() : '-' }}
             </template>
           </template>
         </el-table-column>
-        <el-table-column prop="price_rmb" label="Price" width="130" align="right">
+        <el-table-column prop="price_rmb" label="Price(RMB)" width="130" align="right">
           <template #default="{ row }">
-            <template v-if="exchangeRate > 0 && row.price_usd && calcDirection === 'reverse'">
-              <span class="calculated-price">¥ {{ Math.round(row.price_usd * exchangeRate).toLocaleString() }}</span>
+            <template v-if="rmbExchangeRate > 0 && usdExchangeRate > 0 && row.factory_price">
+              <span class="calculated-price">¥ {{ Math.ceil(Math.ceil(row.factory_price / usdExchangeRate) * rmbExchangeRate).toLocaleString() }}</span>
             </template>
             <template v-else>
               {{ row.price_rmb ? '¥ ' + Number(row.price_rmb).toLocaleString() : '-' }}
@@ -184,10 +190,12 @@ const { statusText, statusTagType, setStatus } = useStatus()
 const initialLoading = ref(true)   // 首次全屏 loading
 
 // ========== 汇率（持久化到 localStorage） ==========
-const savedRate = (() => { try { return parseFloat(localStorage.getItem('price-exchange-rate')) || null } catch { return null } })()
-const exchangeRate = ref(savedRate)
-watch(exchangeRate, (val) => { if (val) localStorage.setItem('price-exchange-rate', String(val)); else localStorage.removeItem('price-exchange-rate') })
-const calcDirection = ref('forward') // 'forward': USD=RMB/rate, 'reverse': RMB=USD*rate
+const savedUsdRate = (() => { try { return parseFloat(localStorage.getItem('price-usd-exchange-rate')) || null } catch { return null } })()
+const usdExchangeRate = ref(savedUsdRate)
+watch(usdExchangeRate, (val) => { if (val) localStorage.setItem('price-usd-exchange-rate', String(val)); else localStorage.removeItem('price-usd-exchange-rate') })
+const savedRmbRate = (() => { try { return parseFloat(localStorage.getItem('price-rmb-exchange-rate')) || null } catch { return null } })()
+const rmbExchangeRate = ref(savedRmbRate)
+watch(rmbExchangeRate, (val) => { if (val) localStorage.setItem('price-rmb-exchange-rate', String(val)); else localStorage.removeItem('price-rmb-exchange-rate') })
 const pdfPriceMode = ref('usd') // PDF导出币种选择：'usd' | 'rmb'
 
 // ========== 筛选 ==========
@@ -381,7 +389,8 @@ const exportExcel = async () => {
       return
     }
 
-    const useCalculatedRate = exchangeRate.value > 0
+    const useUsdRate = usdExchangeRate.value > 0
+    const useRmbRate = rmbExchangeRate.value > 0
     const IMG_COL = 3   // 产品图片在第 3 列（C列）
     const IMG_W = 80    // 图片宽度 px
     const IMG_H = 80    // 图片高度 px
@@ -438,11 +447,11 @@ const exportExcel = async () => {
 
     // 填充数据行
     allData.forEach((item, idx) => {
-      const usdPrice = useCalculatedRate && item.price_rmb && calcDirection.value === 'forward'
-        ? Math.ceil(item.price_rmb / exchangeRate.value)
+      const usdPrice = useUsdRate && item.factory_price
+        ? Math.ceil(item.factory_price / usdExchangeRate.value)
         : item.price_usd
-      const rmbPrice = useCalculatedRate && item.price_usd && calcDirection.value === 'reverse'
-        ? Math.round(item.price_usd * exchangeRate.value)
+      const rmbPrice = useRmbRate && useUsdRate && item.factory_price
+        ? Math.ceil(Math.ceil(item.factory_price / usdExchangeRate.value) * rmbExchangeRate.value)
         : item.price_rmb
 
       const row = ws.addRow({
@@ -553,7 +562,8 @@ const exportPDF = async () => {
       return
     }
 
-    const useCalculatedRate = exchangeRate.value > 0
+    const useUsdRate = usdExchangeRate.value > 0
+    const useRmbRate = rmbExchangeRate.value > 0
 
     // 预下载图片（用于进度显示）
     const imageTasks = allData
@@ -580,13 +590,13 @@ const exportPDF = async () => {
     const isUSD = pdfPriceMode.value === 'usd'
     const rowsHTML = allData.map((item, idx) => {
       const usdPrice = isUSD ? (
-        useCalculatedRate && item.price_rmb && calcDirection.value === 'forward'
-          ? Math.ceil(item.price_rmb / exchangeRate.value)
+        useUsdRate && item.factory_price
+          ? Math.ceil(item.factory_price / usdExchangeRate.value)
           : item.price_usd
       ) : null
       const rmbPrice = !isUSD ? (
-        useCalculatedRate && item.price_usd && calcDirection.value === 'reverse'
-          ? Math.round(item.price_usd * exchangeRate.value)
+        useRmbRate && useUsdRate && item.factory_price
+          ? Math.ceil(Math.ceil(item.factory_price / usdExchangeRate.value) * rmbExchangeRate.value)
           : item.price_rmb
       ) : null
       const imgSrc = imageDataMap.get(idx) || ''
@@ -631,8 +641,8 @@ const exportPDF = async () => {
     container.querySelectorAll('th, td').forEach(cell => {
       cell.style.cssText += ';border:1px solid #ddd;padding:5px 6px;vertical-align:middle'
     })
-    // 价格和尺寸列加粗（第5列为Price，第6-9列为Dimensions/Volume/Area）
-    container.querySelectorAll('td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(8), td:nth-child(9)').forEach(td => {
+    // Specification和Price列加粗（第4列为Specification，第5列为Price）
+    container.querySelectorAll('td:nth-child(4), td:nth-child(5)').forEach(td => {
       td.style.fontWeight = 'bold'
     })
     container.querySelectorAll('th').forEach(th => {
@@ -686,10 +696,28 @@ const exportPDF = async () => {
     const marginBtm = 10
     const contentW = pageW - marginX * 2  // 285mm
 
-    // 标题
+    // 标题（logo + 标题文字，整体居中）
+    const logoH = 10  // logo 高度 mm
+    const logoW = logoH * 1.5  // 15mm
+    const gap = 4  // logo 与标题间距 mm
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
-    doc.text('Qixun Technology Price List', pageW / 2, 9, { align: 'center' })
+    const titleText = 'Qixun Technology Price List'
+    const titleW = doc.getTextWidth(titleText)
+    const groupW = logoW + gap + titleW
+    const groupX = (pageW - groupW) / 2  // 整体居中起始 X
+
+    try {
+      const logoResp = await fetch(`${import.meta.env.BASE_URL}logo.png`)
+      const logoBlob = await logoResp.blob()
+      const logoBase64 = await new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result)
+        reader.readAsDataURL(logoBlob)
+      })
+      doc.addImage(logoBase64, 'PNG', groupX, 3, logoW, logoH)
+    } catch (e) { /* logo 加载失败时忽略 */ }
+    doc.text(titleText, groupX + logoW + gap, 9)
 
     // 联系信息（标题下方，表格上方）
     doc.setFontSize(9)
