@@ -358,6 +358,18 @@ const submitAddData = async () => {
       if (error) throw error
       ElMessage.success('修改成功！')
     } else {
+      // 新增查重：同一用户下「公司名 + 客户名」完全相同则视为重复，提醒并中止添加
+      const { data: dup, error: dupErr } = await supabase
+        .from(TABLE_NAME).select('id')
+        .eq('user_id', currentUser.value.id)
+        .eq('company', company)
+        .eq('client_name', clientName)
+        .limit(1)
+      if (dupErr) throw dupErr
+      if (dup && dup.length > 0) {
+        ElMessage.warning(`公司「${company}」下已存在客户「${clientName || '（未填写客户名）'}」，请勿重复添加！`)
+        return
+      }
       const userCode = await resolveUserCode(company)
       const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, ord: form.isOrdered ? '已下单' : '', remarks }
       const { error } = await supabase.from(TABLE_NAME).insert([record])
