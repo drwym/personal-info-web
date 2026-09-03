@@ -588,6 +588,7 @@ const exportPDF = async () => {
     // 构建 HTML 表格
     const fmtPrice = (v) => v != null ? Number(v).toLocaleString() : ''
     const isUSD = pdfPriceMode.value === 'usd'
+    const priceSymbol = isUSD ? '$' : '¥'   // PDF价格列币种符号：USD用$，RMB用¥
     const rowsHTML = allData.map((item, idx) => {
       const usdPrice = isUSD ? (
         useUsdRate && item.factory_price
@@ -599,6 +600,8 @@ const exportPDF = async () => {
           ? Math.ceil(Math.ceil(item.factory_price / usdExchangeRate.value) * rmbExchangeRate.value)
           : item.price_rmb
       ) : null
+      const priceVal = isUSD ? usdPrice : rmbPrice
+      const priceText = priceVal != null ? `${priceSymbol} ${fmtPrice(priceVal)}` : ''
       const imgSrc = imageDataMap.get(idx) || ''
       const imgCell = imgSrc
         ? `<img src="${imgSrc}" style="width:40px;height:40px;object-fit:contain;display:block;margin:auto">`
@@ -608,7 +611,7 @@ const exportPDF = async () => {
         <td>${item.equipment_name || ''}</td>
         <td style="text-align:center">${imgCell}</td>
         <td style="text-align:center">${item.specification || ''}</td>
-        <td style="text-align:right">${fmtPrice(isUSD ? usdPrice : rmbPrice)}</td>
+        <td style="text-align:right">${priceText}</td>
         <td>${item.equipment_dimensions || ''}</td>
         <td>${item.wooden_frame_dimensions || ''}</td>
         <td>${item.volume || ''}</td>
