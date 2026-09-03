@@ -44,7 +44,7 @@ const {
   currentUser, displayUsername,
   authDialogVisible, authLoading, authError, authForm,
   bootReady,
-  handleAuth,
+  handleAuth, handleLogout,
   showAuthPage, applyUser, clearUser,
   setupAuthListener, getSession, cleanup: cleanupAuth
 } = useAuth()
