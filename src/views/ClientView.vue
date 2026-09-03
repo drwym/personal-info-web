@@ -232,6 +232,7 @@ const editingId = ref(null)
 const submitLoading = ref(false)
 const originalStatus = ref('')
 const originalCompany = ref('')
+const originalClientName = ref('')
 const form = reactive({
   country: '', countryCode: '', time: '', company: '',
   clientName: '', userCode: '', phone: '', source: '', status: '潜在客户', remarks: '', isOrdered: false
@@ -262,6 +263,7 @@ const resetForm = () => {
   form.source = ''; form.status = '潜在客户'; form.remarks = ''; form.isOrdered = false
   originalStatus.value = ''
   originalCompany.value = ''
+  originalClientName.value = ''
 }
 
 const openModal = async (id = null) => {
@@ -289,6 +291,7 @@ const openModal = async (id = null) => {
       form.isOrdered = isOrdered
       originalStatus.value = isOrdered ? '' : item.status
       originalCompany.value = item.company || ''
+      originalClientName.value = item.clientName || ''
     }
   } else {
     resetForm()
@@ -331,6 +334,19 @@ const resolveUserCode = async (company, excludeId = null) => {
   return await nextSequenceCode()
 }
 
+// 查重：同一用户下「公司名 + 客户名」完全相同的记录是否存在（excludeId 用于编辑时排除自身）
+const existsDuplicate = async (company, clientName, excludeId = null) => {
+  let q = supabase
+    .from(TABLE_NAME).select('id')
+    .eq('user_id', currentUser.value.id)
+    .eq('company', company)
+    .eq('client_name', clientName)
+  if (excludeId !== null) q = q.neq('id', excludeId)
+  const { data, error } = await q.limit(1)
+  if (error) throw error
+  return !!(data && data.length > 0)
+}
+
 const submitAddData = async () => {
   if (!form.country || !form.time || !form.company.trim()) {
     ElMessage.warning('请至少填写【国家】、【跟进时间】和【公司】！'); return
@@ -349,9 +365,16 @@ const submitAddData = async () => {
     const remarks = form.remarks.trim()
 
     if (editingId.value !== null) {
+      const companyChanged = company !== (originalCompany.value || '').trim()
+      const nameChanged = clientName !== (originalClientName.value || '').trim()
+      // 编辑查重：公司或客户名变更时，排除自身后若与其他记录「公司名 + 客户名」重复则提醒并中止
+      if ((companyChanged || nameChanged) && await existsDuplicate(company, clientName, editingId.value)) {
+        ElMessage.warning(`公司「${company}」下已存在客户「${clientName || '（未填写客户名）'}」，请勿重复！`)
+        return
+      }
       const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks, ord: form.isOrdered ? '已下单' : '' }
       // 公司变更时按新公司重新解析用户编码（并入已有公司分组或生成新编码）
-      if (company !== (originalCompany.value || '').trim()) {
+      if (companyChanged) {
         record.user_code = await resolveUserCode(company, editingId.value)
       }
       const { error } = await supabase.from(TABLE_NAME).update(record).eq('id', editingId.value)
@@ -359,14 +382,7 @@ const submitAddData = async () => {
       ElMessage.success('修改成功！')
     } else {
       // 新增查重：同一用户下「公司名 + 客户名」完全相同则视为重复，提醒并中止添加
-      const { data: dup, error: dupErr } = await supabase
-        .from(TABLE_NAME).select('id')
-        .eq('user_id', currentUser.value.id)
-        .eq('company', company)
-        .eq('client_name', clientName)
-        .limit(1)
-      if (dupErr) throw dupErr
-      if (dup && dup.length > 0) {
+      if (await existsDuplicate(company, clientName)) {
         ElMessage.warning(`公司「${company}」下已存在客户「${clientName || '（未填写客户名）'}」，请勿重复添加！`)
         return
       }
