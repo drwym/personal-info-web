@@ -31,8 +31,17 @@
         <el-date-picker v-model="form.time" type="date" placeholder="选择日期"
                         value-format="YYYY-MM-DD" style="width:100%;"></el-date-picker>
       </el-form-item>
-      <el-form-item label="公司">
-        <el-input v-model="form.company" placeholder="公司名称" maxlength="100"></el-input>
+      <el-form-item label="公司" prop="company" required>
+        <el-select
+          v-model="form.company"
+          filterable
+          allow-create
+          default-first-option
+          placeholder="选择或输入公司名"
+          style="width:100%;"
+        >
+          <el-option v-for="c in companyList" :key="c" :label="c" :value="c"></el-option>
+        </el-select>
       </el-form-item>
       <el-form-item label="客户名">
         <el-input v-model="form.clientName" placeholder="客户姓名" maxlength="50"></el-input>
@@ -78,6 +87,7 @@ defineProps({
   form: Object,
   countryData: Object,
   sourceList: Array,
+  companyList: Array,
   submitLoading: Boolean,
   isMobile: Boolean
 })
@@ -88,7 +98,8 @@ const formRef = ref(null)
 
 const formRules = {
   country: [{ required: true, message: '请选择国家', trigger: 'change' }],
-  time: [{ required: true, message: '请选择跟进时间', trigger: 'change' }]
+  time: [{ required: true, message: '请选择跟进时间', trigger: 'change' }],
+  company: [{ required: true, message: '请选择或输入公司', trigger: 'change' }]
 }
 
 const handleSubmit = () => {

@@ -6,6 +6,7 @@
         class="cust-table"
         v-loading="loadingPage"
         :data="pageData"
+        :span-method="spanMethod"
         stripe
         border
         :size="isMobile ? 'small' : 'default'"
@@ -32,7 +33,9 @@
             <span v-else style="color:#c0c4cc;">-</span>
           </template>
         </el-table-column>
-        <!-- 4. 国家 (区号) -->
+        <!-- 4. 公司 -->
+        <el-table-column label="公司" prop="company" :min-width="isMobile ? 100 : 140" align="center" header-align="center" show-overflow-tooltip></el-table-column>
+        <!-- 5. 国家 (区号) -->
         <el-table-column label="国家" prop="country" :min-width="isMobile ? 80 : 110" align="center" class-name="col-country" header-align="center">
           <template #default="{ row }">
             <div :class="getCountryClass(row.status)">
@@ -41,10 +44,8 @@
             </div>
           </template>
         </el-table-column>
-        <!-- 5. 跟进时间 -->
+        <!-- 6. 跟进时间 -->
         <el-table-column label="跟进时间" prop="time" :min-width="isMobile ? 95 : 120" align="center" header-align="center" show-overflow-tooltip></el-table-column>
-        <!-- 6. 公司 -->
-        <el-table-column label="公司" prop="company" :min-width="isMobile ? 100 : 140" align="center" header-align="center" show-overflow-tooltip></el-table-column>
         <!-- 7. 客户名 -->
         <el-table-column label="客户名" prop="clientName" :min-width="isMobile ? 80 : 110" align="center" header-align="center" show-overflow-tooltip></el-table-column>
         <!-- 8. 联系方式 -->
@@ -119,6 +120,18 @@ const pagerLayout = computed(() => 'sizes, prev, pager, next')
 
 const indexMethod = (index) => {
   return (props.pagination.currentPage - 1) * props.pagination.pageSize + index + 1
+}
+
+// 按公司分组合并单元格：对用户编码、公司两列合并相邻同 user_code 的行
+const spanMethod = ({ row, column, rowIndex }) => {
+  if (column.property !== 'userCode' && column.property !== 'company') return
+  const data = props.pageData
+  const key = row.userCode
+  if (!key) return { rowspan: 1, colspan: 1 }
+  if (rowIndex > 0 && data[rowIndex - 1].userCode === key) return { rowspan: 0, colspan: 0 }
+  let span = 1
+  for (let i = rowIndex + 1; i < data.length && data[i].userCode === key; i++) span++
+  return { rowspan: span, colspan: 1 }
 }
 
 const getCountryClass = (status) => {

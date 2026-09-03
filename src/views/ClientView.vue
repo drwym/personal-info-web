@@ -47,6 +47,7 @@
       :form="form"
       :country-data="countryData"
       :source-list="sourceList"
+      :company-list="companyList"
       :submit-loading="submitLoading"
       :is-mobile="isMobile"
       @submit="submitAddData"
@@ -68,6 +69,7 @@ import { useAuth } from '../composables/useAuth'
 import { useResponsive } from '../composables/useResponsive'
 import { useStatus } from '../composables/useStatus'
 import { useSourceOptions } from '../composables/useSourceOptions'
+import { useCompanyOptions } from '../composables/useCompanyOptions'
 import PageHeader from '../components/PageHeader.vue'
 import FilterBar from '../components/FilterBar.vue'
 import ClientTable from '../components/ClientTable.vue'
@@ -81,6 +83,7 @@ const { currentUser, fullscreenLoading, bootReady, withTimeout } = useAuth()
 const { isMobile, tableRef, pageSizes, relayoutTable, setupResponsive, cleanupResponsive } = useResponsive()
 const { statusText, statusTagType, setStatus } = useStatus()
 const { sourceList, fetchSourceOptions } = useSourceOptions()
+const { companyList, fetchCompanyOptions } = useCompanyOptions()
 
 // ========== 状态 ==========
 const initialLoading = ref(true)   // 首次全屏 loading
@@ -148,6 +151,8 @@ const buildQuery = () => {
   if (currentFilters.country !== 'all') q = q.eq('country', currentFilters.country)
   q = applyKeywordFilter(q, currentFilters.userCode)
   q = q.order('user_code', { ascending: true })
+    .order('follow_time', { ascending: true })
+    .order('id', { ascending: true })
   return q
 }
 
@@ -197,6 +202,7 @@ const refreshData = async (silent = false) => {
   try {
     pagination.currentPage = 1
     await fetchSourceOptions(currentUser.value.id)
+    await fetchCompanyOptions(currentUser.value.id)
     const ok = await fetchPage()
     if (ok && !silent) ElMessage.success('数据已刷新')
     return ok
@@ -225,6 +231,7 @@ const modalVisible = ref(false)
 const editingId = ref(null)
 const submitLoading = ref(false)
 const originalStatus = ref('')
+const originalCompany = ref('')
 const form = reactive({
   country: '', countryCode: '', time: '', company: '',
   clientName: '', userCode: '', phone: '', source: '', status: '潜在客户', remarks: '', isOrdered: false
@@ -254,6 +261,7 @@ const resetForm = () => {
   form.company = ''; form.clientName = ''; form.userCode = ''; form.phone = ''
   form.source = ''; form.status = '潜在客户'; form.remarks = ''; form.isOrdered = false
   originalStatus.value = ''
+  originalCompany.value = ''
 }
 
 const openModal = async (id = null) => {
@@ -280,6 +288,7 @@ const openModal = async (id = null) => {
       const isOrdered = !!(item.ord && item.ord.trim() !== '')
       form.isOrdered = isOrdered
       originalStatus.value = isOrdered ? '' : item.status
+      originalCompany.value = item.company || ''
     }
   } else {
     resetForm()
@@ -295,7 +304,8 @@ const showRemarkInfo = (text) => {
   }
 }
 
-const generateUserCode = async () => {
+// 取当前用户最大编码 +1（5 位补零）
+const nextSequenceCode = async () => {
   const { data, error } = await supabase
     .from(TABLE_NAME).select('user_code')
     .eq('user_id', currentUser.value.id)
@@ -305,9 +315,25 @@ const generateUserCode = async () => {
   return String(lastNum + 1).padStart(5, '0')
 }
 
+// 按公司解析用户编码：公司已存在则复用其编码（同公司共用一个编码），否则生成新编码
+const resolveUserCode = async (company, excludeId = null) => {
+  const c = (company || '').trim()
+  if (c) {
+    let q = supabase.from(TABLE_NAME).select('user_code')
+      .eq('user_id', currentUser.value.id)
+      .eq('company', c)
+      .not('user_code', 'is', null)
+      .order('user_code', { ascending: true }).limit(1)
+    if (excludeId !== null) q = q.neq('id', excludeId)
+    const { data } = await q
+    if (data && data.length > 0 && data[0].user_code) return data[0].user_code
+  }
+  return await nextSequenceCode()
+}
+
 const submitAddData = async () => {
-  if (!form.country || !form.time) {
-    ElMessage.warning('请至少填写【国家】和【跟进时间】！'); return
+  if (!form.country || !form.time || !form.company.trim()) {
+    ElMessage.warning('请至少填写【国家】、【跟进时间】和【公司】！'); return
   }
   submitLoading.value = true
   // 提交时仅弹窗 loading，不锁全屏
@@ -324,11 +350,15 @@ const submitAddData = async () => {
 
     if (editingId.value !== null) {
       const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks, ord: form.isOrdered ? '已下单' : '' }
+      // 公司变更时按新公司重新解析用户编码（并入已有公司分组或生成新编码）
+      if (company !== (originalCompany.value || '').trim()) {
+        record.user_code = await resolveUserCode(company, editingId.value)
+      }
       const { error } = await supabase.from(TABLE_NAME).update(record).eq('id', editingId.value)
       if (error) throw error
       ElMessage.success('修改成功！')
     } else {
-      const userCode = await generateUserCode()
+      const userCode = await resolveUserCode(company)
       const record = { user_id: currentUser.value.id, country, country_code: countryCode, follow_time: time, company, client_name: clientName, user_code: userCode, phone, source, status, ord: form.isOrdered ? '已下单' : '', remarks }
       const { error } = await supabase.from(TABLE_NAME).insert([record])
       if (error) throw error
@@ -393,6 +423,8 @@ const fetchAll = async (applyFilters = false) => {
     q = applyKeywordFilter(q, currentFilters.userCode)
   }
   q = q.order('user_code', { ascending: true })
+    .order('follow_time', { ascending: true })
+    .order('id', { ascending: true })
   const { data, error } = await q
   if (error) throw error
   return (data || []).map(mapFromDB)
