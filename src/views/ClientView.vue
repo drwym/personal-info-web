@@ -131,13 +131,22 @@ const mapFromDB = (row) => ({
   remarks: row.remarks || ''
 })
 
+// 关键词模糊查询：用户编码、客户名、公司名、联系方式、备注信息
+const applyKeywordFilter = (q, keyword) => {
+  if (!keyword) return q
+  const kw = `%${keyword}%`
+  return q.or(
+    `user_code.ilike."${kw}",client_name.ilike."${kw}",company.ilike."${kw}",phone.ilike."${kw}",remarks.ilike."${kw}"`
+  )
+}
+
 const buildQuery = () => {
   let q = supabase.from(TABLE_NAME).select('*', { count: 'exact' })
     .eq('user_id', currentUser.value.id)
   if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status)
   if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source)
   if (currentFilters.country !== 'all') q = q.eq('country', currentFilters.country)
-  if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`)
+  q = applyKeywordFilter(q, currentFilters.userCode)
   q = q.order('user_code', { ascending: true })
   return q
 }
@@ -218,7 +227,7 @@ const submitLoading = ref(false)
 const originalStatus = ref('')
 const form = reactive({
   country: '', countryCode: '', time: '', company: '',
-  clientName: '', userCode: '', phone: '', source: '', status: '重点跟进', remarks: '', isOrdered: false
+  clientName: '', userCode: '', phone: '', source: '', status: '潜在客户', remarks: '', isOrdered: false
 })
 
 const updateCountryCode = () => {
@@ -243,7 +252,7 @@ const resetForm = () => {
   form.country = ''; form.countryCode = ''
   form.time = todayISO()
   form.company = ''; form.clientName = ''; form.userCode = ''; form.phone = ''
-  form.source = ''; form.status = '重点跟进'; form.remarks = ''; form.isOrdered = false
+  form.source = ''; form.status = '潜在客户'; form.remarks = ''; form.isOrdered = false
   originalStatus.value = ''
 }
 
@@ -381,7 +390,7 @@ const fetchAll = async (applyFilters = false) => {
     if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status)
     if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source)
     if (currentFilters.country !== 'all') q = q.eq('country', currentFilters.country)
-    if (currentFilters.userCode) q = q.ilike('user_code', `%${currentFilters.userCode}%`)
+    q = applyKeywordFilter(q, currentFilters.userCode)
   }
   q = q.order('user_code', { ascending: true })
   const { data, error } = await q

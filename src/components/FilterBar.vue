@@ -49,12 +49,12 @@
         </el-select>
       </div>
       <div class="filter-group">
-        <span class="filter-label">用户编码：</span>
+        <span class="filter-label">关键词：</span>
         <el-input
           v-model="localUserCode"
-          placeholder="输入用户编码"
+          placeholder="编码/客户名/公司/联系方式/备注"
           size="small"
-          style="width: 140px;"
+          style="width: 240px;"
           clearable
           @keyup.enter="$emit('search-user-code')"
           @clear="$emit('search-user-code')"
