@@ -543,6 +543,89 @@ const exportExcel = async () => {
   }
 }
 
+// ========== 导出 PDF：字体与图片预处理 helper ==========
+const PDF_IMG_MAX_EDGE = 400      // 图片降采样最长边（px），控制体积同时保证清晰
+const PDF_IMG_QUALITY = 0.88      // JPEG 编码质量
+const ARIAL = 'Arial'             // jsPDF 中注册的英文字体家族名
+const CJK_FONT_NAME = 'NotoSC'    // 中文兜底字体家族名
+const fontCache = {}
+
+/** 读取 public/ 下字体文件并转 base64（带缓存）；校验字体魔数，避免 SPA 回退把 index.html 当字体 */
+const loadFontBase64 = async (path) => {
+  if (fontCache[path]) return fontCache[path]
+  const resp = await fetch(`${import.meta.env.BASE_URL}${path}`)
+  if (!resp.ok) throw new Error('missing-font:' + path)
+  const bytes = new Uint8Array(await resp.arrayBuffer())
+  // 字体魔数：TrueType(00 01 00 00) / CFF('OTTO') / 'true' / 'typ1'；HTML 回退会以 '<' 开头，据此拦截
+  const valid =
+    (bytes[0] === 0x00 && bytes[1] === 0x01 && bytes[2] === 0x00 && bytes[3] === 0x00) ||
+    (bytes[0] === 0x4f && bytes[1] === 0x54 && bytes[2] === 0x54 && bytes[3] === 0x4f) ||
+    (bytes[0] === 0x74 && bytes[1] === 0x72 && bytes[2] === 0x75 && bytes[3] === 0x65) ||
+    (bytes[0] === 0x74 && bytes[1] === 0x79 && bytes[2] === 0x70 && bytes[3] === 0x31)
+  if (!valid) throw new Error('invalid-font:' + path)
+  let bin = ''
+  const CH = 0x8000
+  for (let i = 0; i < bytes.length; i += CH) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH))
+  }
+  return (fontCache[path] = btoa(bin))
+}
+
+/** 内嵌 Arial 度量等价字体 Arimo，注册为家族名 'Arial'。
+ *  优先静态 Regular/Bold（可得真实粗体）；缺失则回退可变字体（normal/bold 共用一份，粗体按默认字重、非真实加粗）。 */
+const ensureArialFont = async (doc) => {
+  const tryLoad = async (p) => { try { return await loadFontBase64(p) } catch { return null } }
+  let reg = await tryLoad('fonts/Arimo-Regular.ttf')
+  let bold = await tryLoad('fonts/Arimo-Bold.ttf')
+  if (!reg || !bold) {
+    const variable = await tryLoad('fonts/Arimo-VariableFont_wght.ttf')
+    if (!variable) throw new Error('missing-font:Arimo')   // 静态与可变都缺失 → 触发 helvetica 回退
+    reg = reg || variable
+    bold = bold || variable
+  }
+  doc.addFileToVFS('Arimo-Regular.ttf', reg)
+  doc.addFont('Arimo-Regular.ttf', ARIAL, 'normal')
+  if (bold === reg) {
+    doc.addFont('Arimo-Regular.ttf', ARIAL, 'bold')   // 复用同一 VFS，避免重复内嵌同一份字体
+  } else {
+    doc.addFileToVFS('Arimo-Bold.ttf', bold)
+    doc.addFont('Arimo-Bold.ttf', ARIAL, 'bold')
+  }
+}
+
+/** 仅当检测到中文时兜底内嵌 Noto Sans SC */
+const ensureCjkFont = async (doc) => {
+  const b64 = await loadFontBase64('fonts/NotoSansSC-Regular.ttf')
+  doc.addFileToVFS('NotoSansSC-Regular.ttf', b64)
+  doc.addFont('NotoSansSC-Regular.ttf', CJK_FONT_NAME, 'normal')
+  doc.addFont('NotoSansSC-Regular.ttf', CJK_FONT_NAME, 'bold')
+}
+
+/** 将图片 Data URL 降采样为 JPEG（透明区填白防变黑），返回 { data, ratio } */
+const downscaleToJpeg = (dataURL) => new Promise((resolve) => {
+  const img = new Image()
+  img.onload = () => {
+    const w0 = img.naturalWidth || img.width
+    const h0 = img.naturalHeight || img.height
+    if (!w0 || !h0) return resolve(null)
+    const s = Math.min(1, PDF_IMG_MAX_EDGE / Math.max(w0, h0))
+    const cw = Math.max(1, Math.round(w0 * s))
+    const ch = Math.max(1, Math.round(h0 * s))
+    const c = document.createElement('canvas')
+    c.width = cw
+    c.height = ch
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, cw, ch)
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(img, 0, 0, cw, ch)
+    resolve({ data: c.toDataURL('image/jpeg', PDF_IMG_QUALITY), ratio: cw / ch })
+  }
+  img.onerror = () => resolve(null)
+  img.src = dataURL
+})
+
 // ========== 导出 PDF ==========
 const exportPDF = async () => {
   if (total.value === 0) {
@@ -552,9 +635,9 @@ const exportPDF = async () => {
   exportingPdf.value = true
   exportProgress.value = { loaded: 0, total: 0 }
   try {
-    const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
       import('jspdf'),
-      import('html2canvas')
+      import('jspdf-autotable')
     ])
     const allData = await fetchAllData()
     if (allData.length === 0) {
@@ -571,7 +654,7 @@ const exportPDF = async () => {
       .filter(Boolean)
     exportProgress.value.total = imageTasks.length
 
-    // 预下载图片并转为 base64（html2canvas 需要 CORS 安全的图片）
+    // 预下载图片并降采样为 JPEG（控制体积，保留清晰度；透明区填白防变黑）
     const imageDataMap = new Map()
     const CONCURRENCY = 5
     let completed = 0
@@ -579,17 +662,28 @@ const exportPDF = async () => {
       const batch = imageTasks.slice(i, i + CONCURRENCY)
       await Promise.all(batch.map(async ({ rowIndex, url }) => {
         const dataURL = await fetchImageAsDataURL(url)
-        if (dataURL) imageDataMap.set(rowIndex, dataURL)
+        if (dataURL) {
+          const scaled = await downscaleToJpeg(dataURL)
+          if (scaled) imageDataMap.set(rowIndex, scaled)
+        }
         completed++
         exportProgress.value = { ...exportProgress.value, loaded: completed }
       }))
     }
 
-    // 构建 HTML 表格
+    // 组装表头与表体（图片列留空，由 autoTable 的 didDrawCell 叠加原生 JPEG）
     const fmtPrice = (v) => v != null ? Number(v).toLocaleString() : ''
     const isUSD = pdfPriceMode.value === 'usd'
     const priceSymbol = isUSD ? '$' : '¥'   // PDF价格列币种符号：USD用$，RMB用¥
-    const rowsHTML = allData.map((item, idx) => {
+    const IMG_COL = 2   // 图片列索引（0-based）
+
+    const head = [[
+      '#', 'Equipment Name', 'Equipment Images', 'Specification',
+      `Price(${isUSD ? 'USD' : 'RMB'})`, 'Equipment Dimensions', 'Wooden frame dimensions',
+      'Volume', 'Area', 'Standard configuration', 'Remarks', 'Game Instructions'
+    ]]
+
+    const body = allData.map((item, idx) => {
       const usdPrice = isUSD ? (
         useUsdRate && item.factory_price
           ? Math.ceil(item.factory_price / usdExchangeRate.value)
@@ -602,109 +696,57 @@ const exportPDF = async () => {
       ) : null
       const priceVal = isUSD ? usdPrice : rmbPrice
       const priceText = priceVal != null ? `${priceSymbol} ${fmtPrice(priceVal)}` : ''
-      const imgSrc = imageDataMap.get(idx) || ''
-      const imgCell = imgSrc
-        ? `<img src="${imgSrc}" style="width:40px;height:40px;object-fit:contain;display:block;margin:auto">`
-        : ''
-      return `<tr>
-        <td style="text-align:center">${idx + 1}</td>
-        <td>${item.equipment_name || ''}</td>
-        <td style="text-align:center">${imgCell}</td>
-        <td style="text-align:center">${item.specification || ''}</td>
-        <td style="text-align:right">${priceText}</td>
-        <td>${item.equipment_dimensions || ''}</td>
-        <td>${item.wooden_frame_dimensions || ''}</td>
-        <td>${item.volume || ''}</td>
-        <td>${item.area || ''}</td>
-        <td>${item.standard_configuration || ''}</td>
-        <td>${item.remarks || ''}</td>
-        <td>${item.game_instructions || ''}</td>
-      </tr>`
-    }).join('')
-
-    const html = `<table>
-      <thead><tr>
-        <th>#</th><th>Equipment Name</th><th>Equipment Images</th>
-        <th>Specification</th><th>Price(${isUSD ? 'USD' : 'RMB'})</th><th>Equipment Dimensions</th>
-        <th>Wooden frame dimensions</th><th>Volume</th><th>Area</th>
-        <th>Standard configuration</th><th>Remarks</th><th>Game Instructions</th>
-      </tr></thead>
-      <tbody>${rowsHTML}</tbody>
-    </table>`
-
-    // 创建临时容器（z-index负值隐藏在底层，不用visibility:hidden以免html2canvas渲染空白）
-    const container = document.createElement('div')
-    container.style.cssText = 'position:fixed;top:0;left:0;z-index:-10000;width:1600px;background:#fff;padding:16px;font-family:Arial,sans-serif'
-    document.body.appendChild(container)
-    container.innerHTML = html
-
-    // 设置表格样式
-    const table = container.querySelector('table')
-    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px;table-layout:auto'
-    container.querySelectorAll('th, td').forEach(cell => {
-      cell.style.cssText += ';border:1px solid #ddd;padding:5px 6px;vertical-align:middle'
-    })
-    // Specification和Price列加粗（第4列为Specification，第5列为Price）
-    container.querySelectorAll('td:nth-child(4), td:nth-child(5)').forEach(td => {
-      td.style.fontWeight = 'bold'
-    })
-    container.querySelectorAll('th').forEach(th => {
-      th.style.cssText += ';background:#2980b9;color:#fff;font-weight:600;text-align:center;font-size:11px'
-    })
-    // 交替行底色
-    container.querySelectorAll('tbody tr').forEach((tr, i) => {
-      if (i % 2 === 1) {
-        tr.querySelectorAll('td').forEach(td => {
-          td.style.backgroundColor = '#f7fafc'
-        })
-      }
-    })
-    // 设置行高以容纳图片
-    container.querySelectorAll('tbody td').forEach(td => {
-      td.style.lineHeight = '1.4'
+      return [
+        idx + 1,
+        item.equipment_name || '',
+        '',
+        item.specification || '',
+        priceText,
+        item.equipment_dimensions || '',
+        item.wooden_frame_dimensions || '',
+        item.volume || '',
+        item.area || '',
+        item.standard_configuration || '',
+        item.remarks || '',
+        item.game_instructions || ''
+      ]
     })
 
-    // 强制浏览器完成布局计算
-    void container.offsetHeight
-
-    // 记录每行在容器内的 Y 偏移（用于分页对齐行边界）
-    // 容器在 top:0;left:0，所以 getBoundingClientRect().top 即为容器内偏移
-    const tbody = container.querySelector('tbody')
-    const rowOffsets = Array.from(tbody.querySelectorAll('tr')).map(tr => {
-      return tr.getBoundingClientRect().top
-    })
-    // 追加表格底部作为最后一个边界
-    rowOffsets.push(table.getBoundingClientRect().bottom)
-
-    // 渲染为 canvas（scale 2 保证高清）
-    const SCALE = 2
-    const canvas = await html2canvas(container, {
-      scale: SCALE,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      width: 1600,
-      windowWidth: 1600
-    })
-    document.body.removeChild(container)
-
-    // 将 HTML 行偏移转换为 canvas 像素坐标
-    const rowCanvasY = rowOffsets.map(y => y * SCALE)
-
-    // 生成 A4 横向 PDF
+    // 创建 A4 横向 PDF
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+    // 字体：英文统一用内嵌 Arial（Arimo 度量等价），缺失回退 helvetica；含中文时兜底
+    let baseFont = 'helvetica'
+    try {
+      await ensureArialFont(doc)
+      baseFont = ARIAL
+    } catch {
+      ElMessage.warning('未找到 Arial 字体（public/fonts/Arimo-Regular.ttf 与 Arimo-Bold.ttf），已回退内置 helvetica')
+    }
+    const CJK_RE = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/
+    const hasCJK = allData.some(it => CJK_RE.test(
+      `${it.equipment_name} ${it.specification} ${it.remarks} ${it.standard_configuration} ${it.game_instructions} ${it.equipment_dimensions} ${it.wooden_frame_dimensions} ${it.volume} ${it.area}`
+    ))
+    let bodyFont = baseFont   // 表头/抬头/页码用 baseFont(Arial)；body 默认同，含中文时兜底
+    if (hasCJK) {
+      try {
+        await ensureCjkFont(doc)
+        bodyFont = CJK_FONT_NAME
+      } catch {
+        ElMessage.warning('检测到中文但缺少字体（public/fonts/NotoSansSC-Regular.ttf），中文可能显示异常')
+      }
+    }
+
     const pageW = doc.internal.pageSize.getWidth()   // 297mm
     const pageH = doc.internal.pageSize.getHeight()  // 210mm
     const marginX = 6
-    const marginTop = 25
-    const marginBtm = 10
-    const contentW = pageW - marginX * 2  // 285mm
 
-    // 标题（logo + 标题文字，整体居中）
+    // 首页品牌抬头（logo + 标题居中、联系信息、地址、日期）
     const logoH = 10  // logo 高度 mm
     const logoW = logoH * 1.5  // 15mm
     const gap = 4  // logo 与标题间距 mm
     doc.setFontSize(14)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(baseFont, 'bold')
     const titleText = 'Qixun Technology Price List'
     const titleW = doc.getTextWidth(titleText)
     const groupW = logoW + gap + titleW
@@ -724,64 +766,70 @@ const exportPDF = async () => {
 
     // 联系信息（标题下方，表格上方）
     doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(baseFont, 'bold')
     doc.setTextColor(0, 0, 0)
     doc.text('WhatsApp: 008613049108027  WeChat: Qixun116688  Email: jadezeng0802@gmail.com', marginX, 15)
     doc.text('Add: Qixun Technology, GoldenShield Building, No.46, Shui Lian Avenue, Panyu District, Guangzhou City', marginX, 20)
 
     doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(baseFont, 'normal')
     doc.setTextColor(130, 130, 130)
     doc.text(`Date: ${new Date().toISOString().split('T')[0]}`, pageW / 2, 25, { align: 'center' })
     doc.setTextColor(0, 0, 0)
 
-    // 计算每页在 canvas 中可容纳的像素高度
-    const pxPerMm = canvas.width / contentW
-    const availHPx = Math.floor((pageH - marginTop - marginBtm) * pxPerMm)
-
-    // 按行边界分页：找到每页能容纳的最后一行
-    const totalPages = []
-    let cursor = 0  // 当前在 canvas 中的 Y 位置
-    while (cursor < canvas.height) {
-      const pageEnd = cursor + availHPx
-      if (pageEnd >= canvas.height) {
-        totalPages.push({ start: cursor, end: canvas.height })
-        break
+    // autoTable：矢量文字 + 原生图片，自动分页并每页重复表头
+    autoTable(doc, {
+      startY: 28,
+      head,
+      body,
+      margin: { top: 12, right: marginX, bottom: 14, left: marginX },
+      theme: 'grid',
+      rowPageBreak: 'avoid',   // 行不跨页：整行放不下时整体移到下一页，宁可每页行数少
+      styles: { font: bodyFont, fontSize: 8, cellPadding: 1.5, overflow: 'linebreak', valign: 'middle' },
+      headStyles: { font: baseFont, fontStyle: 'bold', fontSize: 9, halign: 'center', fillColor: [41, 128, 185], textColor: 255 },
+      alternateRowStyles: { fillColor: [247, 250, 252] },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 30, halign: 'center' },   // 图片列加宽，产品图展示更大
+        3: { cellWidth: 18, halign: 'center' },
+        4: { cellWidth: 20, halign: 'right' },
+        5: { cellWidth: 26 },
+        6: { cellWidth: 30 },
+        7: { cellWidth: 16 },
+        8: { cellWidth: 15 },
+        9: { cellWidth: 22 },
+        10: { cellWidth: 28 },
+        11: { cellWidth: 42 }
+      }, // 合计 285mm
+      didParseCell: (d) => {
+        if (d.section !== 'body') return
+        if (d.column.index === IMG_COL && imageDataMap.has(d.row.index)) d.cell.styles.minCellHeight = 22   // 抬高图片行，给产品图更多纵向空间
+        if (d.column.index === 3 || d.column.index === 4) d.cell.styles.fontStyle = 'bold'
+      },
+      didDrawCell: (d) => {
+        if (d.section !== 'body' || d.column.index !== IMG_COL) return
+        const im = imageDataMap.get(d.row.index)
+        if (!im) return
+        const boxW = d.cell.width - 3, boxH = d.cell.height - 3   // 留 1.5mm padding
+        let w = boxW, h = w / im.ratio
+        if (h > boxH) { h = boxH; w = h * im.ratio }               // contain 等比缩放
+        const x = d.cell.x + (d.cell.width - w) / 2
+        const y = d.cell.y + (d.cell.height - h) / 2
+        d.doc.addImage(im.data, 'JPEG', x, y, w, h, undefined, 'FAST')
       }
-      // 在 rowCanvasY 中找到 <= pageEnd 的最大行边界
-      let bestEnd = cursor
-      for (const ry of rowCanvasY) {
-        if (ry > cursor && ry <= pageEnd) {
-          bestEnd = ry
-        }
-      }
-      // 如果找不到合适的边界（单行太高），至少前进一点避免死循环
-      if (bestEnd <= cursor) bestEnd = pageEnd
-      totalPages.push({ start: cursor, end: bestEnd })
-      cursor = bestEnd
-    }
+    })
 
-    for (let i = 0; i < totalPages.length; i++) {
-      if (i > 0) doc.addPage()
-      const { start, end } = totalPages[i]
-      const sliceH = end - start
-
-      const pageCanvas = document.createElement('canvas')
-      pageCanvas.width = canvas.width
-      pageCanvas.height = sliceH
-      const ctx = pageCanvas.getContext('2d')
-      ctx.drawImage(canvas, 0, -start)
-
-      const pageImg = pageCanvas.toDataURL('image/jpeg', 0.92)
-      const pageImgH = sliceH / pxPerMm
-      doc.addImage(pageImg, 'JPEG', marginX, marginTop, contentW, pageImgH)
-
-      // 页码
+    // 页码脚注（autoTable 完成后统一补）
+    const n = doc.getNumberOfPages()
+    for (let p = 1; p <= n; p++) {
+      doc.setPage(p)
+      doc.setFont(baseFont, 'normal')
       doc.setFontSize(7)
       doc.setTextColor(160, 160, 160)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`Page ${i + 1} / ${totalPages.length}`, pageW / 2, pageH - 4, { align: 'center' })
+      doc.text(`Page ${p} / ${n}`, pageW / 2, pageH - 5, { align: 'center' })
     }
+    doc.setTextColor(0, 0, 0)
 
     doc.save(`Qixun_PriceList_${new Date().toISOString().split('T')[0]}.pdf`)
     ElMessage.success(`导出成功！共 ${allData.length} 条数据`)
