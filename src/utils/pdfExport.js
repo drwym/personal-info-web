@@ -185,8 +185,8 @@ export async function exportPriceListToPDF({
     ) : null
     const rmbPrice = !isUSD ? (
       useRmbRate && useUsdRate && item.factory_price
-        ? Math.ceil(Math.ceil(item.factory_price / usdExchangeRate) * rmbExchangeRate)
-        : item.price_rmb
+        ? item.factory_price
+        : item.factory_price
     ) : null
     const priceVal = isUSD ? usdPrice : rmbPrice
     const priceText = priceVal != null ? `${priceSymbol} ${fmtPrice(priceVal)}` : ''
