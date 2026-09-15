@@ -159,7 +159,6 @@ html, body {
 .el-radio-group .rb-primary.is-active { background-color: #1E90FF !important; border-color: #1E90FF !important; box-shadow: -1px 0 0 0 #1E90FF !important; color: #fff !important; }
 .el-radio-group .rb-danger.is-active { background-color: #FF0000 !important; border-color: #FF0000 !important; box-shadow: -1px 0 0 0 #FF0000 !important; color: #fff !important; }
 .el-radio-group .rb-success.is-active { background-color: #2E8B57 !important; border-color: #2E8B57 !important; box-shadow: -1px 0 0 0 #2E8B57 !important; color: #fff !important; }
-.el-radio-group .rb-all.is-active { background-color: #409eff !important; border-color: #409eff !important; box-shadow: -1px 0 0 0 #409eff !important; color: #fff !important; }
 /* radio-button 文字颜色默认深色 */
 .el-radio-button__inner {
   color: #666;

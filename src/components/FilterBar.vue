@@ -4,23 +4,21 @@
       <div class="filter-group">
         <span class="filter-label">状态筛选：</span>
         <el-radio-group v-model="localStatus" size="small">
-          <el-radio-button value="all" class="rb-all">全部</el-radio-button>
-          <el-radio-button value="潜在客户" class="rb-primary">☆潜在客户</el-radio-button>
-          <el-radio-button value="重点跟进" class="rb-danger">☆重点跟进</el-radio-button>
-          <el-radio-button value="下单完成" class="rb-success">☆下单完成</el-radio-button>
+          <el-radio-button value="潜在客户" class="rb-primary" @click="toggleStatus('潜在客户')">☆潜在客户</el-radio-button>
+          <el-radio-button value="重点跟进" class="rb-danger" @click="toggleStatus('重点跟进')">☆重点跟进</el-radio-button>
+          <el-radio-button value="下单完成" class="rb-success" @click="toggleStatus('下单完成')">☆下单完成</el-radio-button>
         </el-radio-group>
       </div>
       <div class="filter-group">
         <span class="filter-label">来源筛选：</span>
         <el-select
           v-model="localSource"
-          placeholder="选择来源"
+          placeholder="全部来源"
           size="small"
           style="width: 160px;"
           filterable
           clearable
         >
-          <el-option value="all" label="全部来源"></el-option>
           <el-option
             v-for="s in sourceList"
             :key="s"
@@ -33,13 +31,12 @@
         <span class="filter-label">国家筛选：</span>
         <el-select
           v-model="localCountry"
-          placeholder="选择国家"
+          placeholder="全部国家"
           size="small"
           style="width: 160px;"
           filterable
           clearable
         >
-          <el-option value="all" label="全部国家"></el-option>
           <el-option
             v-for="c in countryList"
             :key="c"
@@ -92,6 +89,13 @@ const localStatus = computed({
   get: () => props.currentFilters.status,
   set: (val) => emit('update:currentFilters', { ...props.currentFilters, status: val })
 })
+
+// 再次点击已选中的状态 → 取消选中（清空），恢复查询全部状态
+const toggleStatus = (val) => {
+  if (props.currentFilters.status === val) {
+    emit('update:currentFilters', { ...props.currentFilters, status: '' })
+  }
+}
 
 const localSource = computed({
   get: () => props.currentFilters.source,

@@ -101,8 +101,17 @@ const restoreFilters = () => {
   return null
 }
 
-const savedFilters = restoreFilters()
-const currentFilters = reactive(savedFilters || { status: 'all', source: 'all', country: 'all', userCode: '' })
+// 归一化筛选值：历史遗留的 'all' 与空值统一为 ''（'' 表示不过滤 = 查询全部）
+const normalizeFilters = (raw) => {
+  const f = raw || {}
+  return {
+    status: !f.status || f.status === 'all' ? '' : f.status,
+    source: !f.source || f.source === 'all' ? '' : f.source,
+    country: !f.country || f.country === 'all' ? '' : f.country,
+    userCode: f.userCode || ''
+  }
+}
+const currentFilters = reactive(normalizeFilters(restoreFilters()))
 
 // 持久化筛选条件
 watch(currentFilters, (val) => {
@@ -146,9 +155,9 @@ const applyKeywordFilter = (q, keyword) => {
 const buildQuery = () => {
   let q = supabase.from(TABLE_NAME).select('*', { count: 'exact' })
     .eq('user_id', currentUser.value.id)
-  if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status)
-  if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source)
-  if (currentFilters.country !== 'all') q = q.eq('country', currentFilters.country)
+  if (currentFilters.status) q = q.eq('status', currentFilters.status)
+  if (currentFilters.source) q = q.eq('source', currentFilters.source)
+  if (currentFilters.country) q = q.eq('country', currentFilters.country)
   q = applyKeywordFilter(q, currentFilters.userCode)
   q = q.order('user_code', { ascending: true })
     .order('follow_time', { ascending: true })
@@ -334,6 +343,21 @@ const resolveUserCode = async (company, excludeId = null) => {
   return await nextSequenceCode()
 }
 
+// 统计某公司名下（排除指定记录）属于当前用户的客户数量
+const countCompanyClients = async (company, excludeId = null) => {
+  const c = (company || '').trim()
+  if (!c) return 0
+  let q = supabase
+    .from(TABLE_NAME)
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', currentUser.value.id)
+    .eq('company', c)
+  if (excludeId !== null) q = q.neq('id', excludeId)
+  const { count, error } = await q
+  if (error) throw error
+  return count || 0
+}
+
 // 查重：同一用户下「公司名 + 客户名」完全相同的记录是否存在（excludeId 用于编辑时排除自身）
 const existsDuplicate = async (company, clientName, excludeId = null) => {
   let q = supabase
@@ -373,9 +397,20 @@ const submitAddData = async () => {
         return
       }
       const record = { country, country_code: countryCode, follow_time: time, company, client_name: clientName, phone, source, status, remarks, ord: form.isOrdered ? '已下单' : '' }
-      // 公司变更时按新公司重新解析用户编码（并入已有公司分组或生成新编码）
+      // 公司变更时决定用户编码：
+      // 仅当「原公司只有当前这一个客户」且「新公司名在现有数据中不存在」时，
+      // 视为单人公司重命名，保留原编码不变；否则按新公司重新解析编码。
       if (companyChanged) {
-        record.user_code = await resolveUserCode(company, editingId.value)
+        const origCompany = (originalCompany.value || '').trim()
+        let keepCode = false
+        if (origCompany) {
+          const othersInOriginal = await countCompanyClients(origCompany, editingId.value)
+          const othersInNew = await countCompanyClients(company, editingId.value)
+          keepCode = othersInOriginal === 0 && othersInNew === 0
+        }
+        if (!keepCode) {
+          record.user_code = await resolveUserCode(company, editingId.value)
+        }
       }
       const { error } = await supabase.from(TABLE_NAME).update(record).eq('id', editingId.value)
       if (error) throw error
@@ -441,13 +476,22 @@ const searchUserCode = () => {
   fetchPage()
 }
 
+// 国家/来源/状态变化（含清空）时，自动回到第 1 页并即时查询（关键词仍由 searchUserCode 触发）
+watch(
+  () => [currentFilters.status, currentFilters.source, currentFilters.country],
+  () => {
+    pagination.currentPage = 1
+    fetchPage()
+  }
+)
+
 // ========== 导出导入 ==========
 const fetchAll = async (applyFilters = false) => {
   let q = supabase.from(TABLE_NAME).select('*').eq('user_id', currentUser.value.id)
   if (applyFilters) {
-    if (currentFilters.status !== 'all') q = q.eq('status', currentFilters.status)
-    if (currentFilters.source !== 'all') q = q.eq('source', currentFilters.source)
-    if (currentFilters.country !== 'all') q = q.eq('country', currentFilters.country)
+    if (currentFilters.status) q = q.eq('status', currentFilters.status)
+    if (currentFilters.source) q = q.eq('source', currentFilters.source)
+    if (currentFilters.country) q = q.eq('country', currentFilters.country)
     q = applyKeywordFilter(q, currentFilters.userCode)
   }
   q = q.order('user_code', { ascending: true })
