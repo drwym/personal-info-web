@@ -120,7 +120,7 @@ watch(currentFilters, (val) => {
 
 const pagination = reactive({
   currentPage: 1,
-  pageSize: isMobile.value ? 10 : 20,
+  pageSize: 10,
   total: 0
 })
 const selectedRows = ref([])

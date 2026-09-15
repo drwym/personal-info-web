@@ -72,14 +72,10 @@ html, body {
   text-overflow: ellipsis;
   overflow: hidden;
 }
-/* 国家列居中两行 */
+/* 国家列：国家名与区号同一行不换行 */
 .cust-table .col-country .cell {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  white-space: nowrap;
   line-height: 1.4;
-  white-space: normal;
 }
 /* 备注列允许换行，左对齐 */
 .cust-table .col-remarks .cell {
@@ -98,7 +94,7 @@ html, body {
 .country-focus { color: #FF0000; font-weight: 600; }
 .country-done { color: #2E8B57; font-weight: 600; }
 .country-default { color: #000; font-weight: 600; }
-.country-code-sub { font-size: 11px; color: #555; font-weight: normal; margin-top: 2px; }
+.country-code-sub { font-size: 11px; color: #555; font-weight: normal; margin-left: 2px; }
 
 /* 备注单元格 */
 .remark-cell {

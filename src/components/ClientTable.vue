@@ -37,11 +37,11 @@
         <!-- 4. 公司 -->
         <el-table-column label="公司" prop="company" :min-width="isMobile ? 100 : 140" align="center" header-align="center" show-overflow-tooltip></el-table-column>
         <!-- 5. 国家 (区号) -->
-        <el-table-column label="国家" prop="country" :min-width="isMobile ? 80 : 110" align="center" class-name="col-country" header-align="center">
+        <el-table-column label="国家" prop="country" :min-width="isMobile ? 80 : 110" align="center" class-name="col-country" header-align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <div :class="getCountryClass(row.status)">
               {{ row.countryName || row.country }}
-              <div class="country-code-sub">({{ row.countryCode || '' }})</div>
+              <span class="country-code-sub">({{ row.countryCode || '' }})</span>
             </div>
           </template>
         </el-table-column>
@@ -68,16 +68,17 @@
         <!-- 11. 备注 -->
         <el-table-column label="备注" prop="remarks" :min-width="isMobile ? 140 : 200" align="left" header-align="center" class-name="col-remarks">
           <template #default="{ row }">
-            <div class="remark-cell">
-              <span class="remark-text" @click="$emit('show-remark', row.remarks)">
-                {{ row.remarks || '' }}
-              </span>
-              <div class="edit-link">
-                <el-button link type="primary" size="small" @click="$emit('edit', row.id)">
-                  <el-icon><Edit /></el-icon> 修改
-                </el-button>
-              </div>
-            </div>
+            <span class="remark-text" @click="$emit('show-remark', row.remarks)">
+              {{ row.remarks || '' }}
+            </span>
+          </template>
+        </el-table-column>
+        <!-- 12. 操作 -->
+        <el-table-column label="操作" :width="isMobile ? 70 : 90" align="center" header-align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="$emit('edit', row.id)">
+              <el-icon><Edit /></el-icon> 修改
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
