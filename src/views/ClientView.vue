@@ -1,5 +1,5 @@
 <template>
-  <div v-loading.fullscreen.lock="initialLoading" element-loading-text="正在从云端加载数据...">
+  <div class="client-view" v-loading.fullscreen.lock="initialLoading" element-loading-text="正在从云端加载数据...">
     <PageHeader
       title="客户信息表"
       :status-text="statusText"
@@ -621,3 +621,31 @@ onBeforeUnmount(() => {
   cleanupResponsive()
 })
 </script>
+
+<style scoped>
+@media (min-width: 769px) {
+  .client-view {
+    height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .client-view .page-header,
+  .client-view .filter-card,
+  .client-view .action-bar {
+    flex-shrink: 0;
+  }
+  .client-view .table-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .client-view .table-card :deep(.el-card__body) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}
+</style>

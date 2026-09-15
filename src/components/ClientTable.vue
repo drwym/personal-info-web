@@ -1,11 +1,12 @@
 <template>
   <el-card class="table-card" shadow="never" body-style="padding:0;">
-    <div class="table-wrapper">
+    <div class="table-wrapper" ref="wrapperRef">
       <el-table
         ref="innerTable"
         class="cust-table"
         v-loading="loadingPage"
         :data="pageData"
+        :height="tableHeight"
         :span-method="spanMethod"
         stripe
         border
@@ -101,7 +102,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   pageData: Array,
@@ -113,6 +114,35 @@ const props = defineProps({
 
 const innerTable = ref(null)
 defineExpose({ innerTable })
+
+// 桌面端表格高度自适应：测得容器像素高度后绑定给 el-table，实现表体内部滚动
+const wrapperRef = ref(null)
+const tableHeight = ref(undefined)
+let resizeObserver = null
+
+const updateHeight = () => {
+  if (props.isMobile) {
+    tableHeight.value = undefined
+    return
+  }
+  const h = wrapperRef.value?.clientHeight
+  if (h) tableHeight.value = h
+}
+
+onMounted(() => {
+  updateHeight()
+  if (typeof ResizeObserver !== 'undefined' && wrapperRef.value) {
+    resizeObserver = new ResizeObserver(() => updateHeight())
+    resizeObserver.observe(wrapperRef.value)
+  }
+})
+
+watch(() => props.isMobile, updateHeight)
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+})
 
 const emit = defineEmits(['selection-change', 'show-remark', 'edit', 'page-change', 'size-change', 'add'])
 
@@ -141,3 +171,13 @@ const getCountryClass = (status) => {
   return 'country-default'
 }
 </script>
+
+<style scoped>
+@media (min-width: 769px) {
+  .table-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+</style>
