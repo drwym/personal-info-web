@@ -10,6 +10,13 @@
     align-center
     @update:model-value="$emit('update:visible', $event)"
   >
+    <div class="auth-brand">
+      <img src="/logo.png" alt="logo" class="auth-logo">
+      <div class="auth-brand-text">
+        <div class="auth-brand-title">个人中心</div>
+        <div class="auth-brand-subtitle">客户信息 · 节日日历 · 价格管理</div>
+      </div>
+    </div>
     <div class="auth-error">{{ error }}</div>
     <el-form :model="form" label-position="top" size="large">
       <el-form-item>
@@ -43,3 +50,28 @@ defineEmits(['login', 'update:visible'])
 import { ref } from 'vue'
 const pwdInput = ref(null)
 </script>
+<style scoped>
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.auth-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.auth-brand-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #303133;
+  line-height: 1.3;
+}
+.auth-brand-subtitle {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+</style>

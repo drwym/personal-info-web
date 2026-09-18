@@ -31,7 +31,7 @@
         <el-table-column label="用户编码" prop="userCode" :min-width="isMobile ? 80 : 110" align="center" header-align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.userCode">{{ row.userCode }}</span>
-            <span v-else style="color:#c0c4cc;">-</span>
+            <span v-else class="cell-placeholder">-</span>
           </template>
         </el-table-column>
         <!-- 4. 公司 -->
@@ -55,14 +55,14 @@
         <el-table-column label="来源" prop="source" :width="isMobile ? 70 : 100" align="center" header-align="center">
           <template #default="{ row }">
             <el-tag v-if="row.source" size="small" effect="plain">{{ row.source }}</el-tag>
-            <span v-else style="color:#c0c4cc;">-</span>
+            <span v-else class="cell-placeholder">-</span>
           </template>
         </el-table-column>
         <!-- 10. 下单 -->
         <el-table-column label="下单" prop="ord" :width="isMobile ? 60 : 80" align="center" header-align="center">
           <template #default="{ row }">
-            <span v-if="row.ord" style="color:#67c23a;">已下单</span>
-            <span v-else style="color:#c0c4cc;">-</span>
+            <span v-if="row.ord" class="cell-ordered">已下单</span>
+            <span v-else class="cell-placeholder">-</span>
           </template>
         </el-table-column>
         <!-- 11. 备注 -->
@@ -74,10 +74,13 @@
           </template>
         </el-table-column>
         <!-- 12. 操作 -->
-        <el-table-column label="操作" :width="isMobile ? 70 : 90" align="center" header-align="center" fixed="right">
+        <el-table-column label="操作" :width="isMobile ? 110 : 140" align="center" header-align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="$emit('edit', row.id)">
               <el-icon><Edit /></el-icon> 修改
+            </el-button>
+            <el-button link type="danger" size="small" @click="$emit('delete', row.id)">
+              <el-icon><Delete /></el-icon> 删除
             </el-button>
           </template>
         </el-table-column>
@@ -145,7 +148,7 @@ onBeforeUnmount(() => {
   resizeObserver = null
 })
 
-const emit = defineEmits(['selection-change', 'show-remark', 'edit', 'page-change', 'size-change', 'add'])
+const emit = defineEmits(['selection-change', 'show-remark', 'edit', 'delete', 'page-change', 'size-change', 'add'])
 
 const pagerLayout = computed(() => 'sizes, prev, pager, next')
 
@@ -174,6 +177,9 @@ const getCountryClass = (status) => {
 </script>
 
 <style scoped>
+.cell-placeholder { color: var(--text-placeholder); }
+.cell-ordered { color: var(--status-done); }
+
 @media (min-width: 769px) {
   .table-wrapper {
     flex: 1;

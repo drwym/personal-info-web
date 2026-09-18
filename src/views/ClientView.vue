@@ -26,6 +26,7 @@
       @selection-change="handleSelectionChange"
       @show-remark="showRemarkInfo"
       @edit="openModal"
+      @delete="handleDelete"
       @add="openModal()"
       @page-change="handleCurrentChange"
       @size-change="handleSizeChange"
@@ -471,19 +472,32 @@ watch(() => [currentFilters.status, currentFilters.source, currentFilters.countr
   fetchPage()
 })
 
+// 单条删除（与批量删除保持一致的确认与刷新逻辑）
+const handleDelete = async (id) => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除这条客户数据吗？此操作不可撤销！',
+      '删除确认', { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    loadingPage.value = true
+    const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id)
+    if (error) throw error
+    ElMessage.success('删除成功')
+    const restOnPage = pageData.value.filter(item => item.id !== id).length
+    if (restOnPage === 0 && pagination.currentPage > 1) pagination.currentPage -= 1
+    await fetchPage()
+  } catch (err) {
+    if (err !== 'cancel') ElMessage.error('删除失败: ' + (err.message || err))
+  } finally {
+    loadingPage.value = false
+  }
+}
+
 const searchUserCode = () => {
   pagination.currentPage = 1
   fetchPage()
 }
 
-// 国家/来源/状态变化（含清空）时，自动回到第 1 页并即时查询（关键词仍由 searchUserCode 触发）
-watch(
-  () => [currentFilters.status, currentFilters.source, currentFilters.country],
-  () => {
-    pagination.currentPage = 1
-    fetchPage()
-  }
-)
 
 // ========== 导出导入 ==========
 const fetchAll = async (applyFilters = false) => {

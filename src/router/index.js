@@ -2,11 +2,11 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import HomePage from '../views/HomePage.vue'
 
 const routes = [
-  { path: '/', name: 'Home', component: HomePage },
-  { path: '/clients', name: 'Clients', component: () => import('../views/ClientView.vue') },
-  { path: '/calendar', name: 'Calendar', component: () => import('../views/HolidayView.vue') },
-  { path: '/sources', name: 'Sources', component: () => import('../views/SourceView.vue') },
-  { path: '/price', name: 'Price', component: () => import('../views/PriceView.vue') },
+  { path: '/', name: 'Home', component: HomePage, meta: { title: '首页看板' } },
+  { path: '/clients', name: 'Clients', component: () => import('../views/ClientView.vue'), meta: { title: '客户信息' } },
+  { path: '/calendar', name: 'Calendar', component: () => import('../views/HolidayView.vue'), meta: { title: '国家日历' } },
+  { path: '/sources', name: 'Sources', component: () => import('../views/SourceView.vue'), meta: { title: '来源配置' } },
+  { path: '/price', name: 'Price', component: () => import('../views/PriceView.vue'), meta: { title: '价格表' } },
   { path: '/:pathMatch(.*)', name: 'NotFound', redirect: '/' }
 ]
 
@@ -16,6 +16,12 @@ const router = createRouter({
   scrollBehavior() {
     return { top: 0 }
   }
+})
+
+// 动态页面标题
+const BASE_TITLE = '个人中心'
+router.afterEach((to) => {
+  document.title = to.meta?.title ? `${to.meta.title} · ${BASE_TITLE}` : BASE_TITLE
 })
 
 // 全局路由守卫：未登录时重定向到首页（弹出登录框）

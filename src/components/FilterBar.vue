@@ -4,9 +4,15 @@
       <div class="filter-group">
         <span class="filter-label">状态筛选：</span>
         <el-radio-group v-model="localStatus" size="small">
-          <el-radio-button value="潜在客户" class="rb-primary" @click="toggleStatus('潜在客户')">☆潜在客户</el-radio-button>
-          <el-radio-button value="重点跟进" class="rb-danger" @click="toggleStatus('重点跟进')">☆重点跟进</el-radio-button>
-          <el-radio-button value="下单完成" class="rb-success" @click="toggleStatus('下单完成')">☆下单完成</el-radio-button>
+          <el-radio-button value="潜在客户" class="rb-primary" @click="toggleStatus('潜在客户')">
+            <span class="status-dot" :style="{ background: 'var(--status-potential)' }"></span>潜在客户
+          </el-radio-button>
+          <el-radio-button value="重点跟进" class="rb-danger" @click="toggleStatus('重点跟进')">
+            <span class="status-dot" :style="{ background: 'var(--status-focus)' }"></span>重点跟进
+          </el-radio-button>
+          <el-radio-button value="下单完成" class="rb-success" @click="toggleStatus('下单完成')">
+            <span class="status-dot" :style="{ background: 'var(--status-done)' }"></span>下单完成
+          </el-radio-button>
         </el-radio-group>
       </div>
       <div class="filter-group">
@@ -112,3 +118,13 @@ const localUserCode = computed({
   set: (val) => emit('update:currentFilters', { ...props.currentFilters, userCode: val })
 })
 </script>
+<style scoped>
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+</style>

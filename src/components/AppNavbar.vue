@@ -55,18 +55,22 @@
         </el-dropdown>
       </div>
       <!-- 移动端底部 Tab Bar -->
-      <div class="mobile-tabbar">
+      <nav class="mobile-tabbar" aria-label="主导航">
         <div
           v-for="item in tabItems"
           :key="item.path"
           class="tabbar-item"
           :class="{ active: activeRoute === item.path }"
+          role="link"
+          tabindex="0"
+          :aria-current="activeRoute === item.path ? 'page' : undefined"
           @click="$router.push(item.path)"
+          @keyup.enter="$router.push(item.path)"
         >
           <el-icon :size="20"><component :is="item.icon" /></el-icon>
           <span class="tabbar-label">{{ item.label }}</span>
         </div>
-      </div>
+      </nav>
     </template>
   </div>
 </template>

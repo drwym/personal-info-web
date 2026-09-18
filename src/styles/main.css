@@ -1,3 +1,17 @@
+/* ========== 设计令牌 ========== */
+:root {
+  --app-primary: #409eff;
+  --status-potential: #1e90ff;
+  --status-focus: #f56c6c;
+  --status-done: #2e8b57;
+  --status-default: #303133;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --tabbar-height: 60px;
+  --text-placeholder: #909399;
+}
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
@@ -90,10 +104,10 @@ html, body {
 }
 
 /* 国家列状态着色 */
-.country-potential { color: #1E90FF; font-weight: 600; }
-.country-focus { color: #FF0000; font-weight: 600; }
-.country-done { color: #2E8B57; font-weight: 600; }
-.country-default { color: #000; font-weight: 600; }
+.country-potential { color: var(--status-potential); font-weight: 600; }
+.country-focus { color: var(--status-focus); font-weight: 600; }
+.country-done { color: var(--status-done); font-weight: 600; }
+.country-default { color: var(--status-default); font-weight: 600; }
 .country-code-sub { font-size: 11px; color: #555; font-weight: normal; margin-left: 2px; }
 
 /* 备注单元格 */
@@ -152,9 +166,9 @@ html, body {
 }
 
 /* 筛选 radio-button 状态色 */
-.el-radio-group .rb-primary.is-active { background-color: #1E90FF !important; border-color: #1E90FF !important; box-shadow: -1px 0 0 0 #1E90FF !important; color: #fff !important; }
-.el-radio-group .rb-danger.is-active { background-color: #FF0000 !important; border-color: #FF0000 !important; box-shadow: -1px 0 0 0 #FF0000 !important; color: #fff !important; }
-.el-radio-group .rb-success.is-active { background-color: #2E8B57 !important; border-color: #2E8B57 !important; box-shadow: -1px 0 0 0 #2E8B57 !important; color: #fff !important; }
+.el-radio-group .rb-primary.is-active { background-color: var(--status-potential) !important; border-color: var(--status-potential) !important; box-shadow: -1px 0 0 0 var(--status-potential) !important; color: #fff !important; }
+.el-radio-group .rb-danger.is-active { background-color: var(--status-focus) !important; border-color: var(--status-focus) !important; box-shadow: -1px 0 0 0 var(--status-focus) !important; color: #fff !important; }
+.el-radio-group .rb-success.is-active { background-color: var(--status-done) !important; border-color: var(--status-done) !important; box-shadow: -1px 0 0 0 var(--status-done) !important; color: #fff !important; }
 /* radio-button 文字颜色默认深色 */
 .el-radio-button__inner {
   color: #666;
@@ -316,7 +330,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .holiday-calendar-wrapper,
   .price-content,
   .table-card {
-    margin-bottom: 60px !important;
+    margin-bottom: calc(var(--tabbar-height) + 8px) !important;
   }
 
   /* 表格loading居中 */
@@ -353,7 +367,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   padding: 8px 12px;
   margin-bottom: 12px;
   background: #ecf5ff;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: #409eff;
   font-size: 13px;
 }
@@ -364,7 +378,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 /* 日历网格 */
 .calendar-grid {
   border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: #fff;
 }
@@ -419,7 +433,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   margin-bottom: 4px;
 }
 .is-other-month .cell-date {
-  color: #c0c4cc;
+  color: #a8abb2;
 }
 .is-today .cell-date {
   color: #67c23a;

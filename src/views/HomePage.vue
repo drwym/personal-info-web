@@ -38,7 +38,15 @@
       <!-- 统计数字卡片 -->
       <el-row :gutter="14" class="stat-row">
         <el-col :xs="12" :sm="6" v-for="(item, idx) in statCards" :key="item.label">
-          <div class="stat-card" :style="{ '--accent': item.color, animationDelay: idx * 0.08 + 's' }">
+          <div
+            class="stat-card"
+            :style="{ '--accent': item.color, animationDelay: idx * 0.08 + 's' }"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看${item.label}`"
+            @click="goClientsWithStatus(item.status)"
+            @keyup.enter="goClientsWithStatus(item.status)"
+          >
             <div class="stat-icon">
               <el-icon :size="20"><component :is="item.icon" /></el-icon>
             </div>
@@ -121,12 +129,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { supabase, TABLE_NAME } from '../config/supabase'
 import { isoToCn } from '../utils/countryCodeMap'
 import { useAuth } from '../composables/useAuth'
 import { useStatus } from '../composables/useStatus'
 import PageHeader from '../components/PageHeader.vue'
 
+const router = useRouter()
 const { currentUser, displayUsername } = useAuth()
 const { statusText, statusTagType, setStatus } = useStatus()
 
@@ -149,11 +159,17 @@ const stats = computed(() => {
 })
 
 const statCards = computed(() => [
-  { label: '客户总数', value: stats.value.total, icon: 'User', color: '#409eff', bg: '#ecf5ff' },
-  { label: '潜在客户', value: stats.value.potential, icon: 'Star', color: '#1e90ff', bg: '#e8f4ff' },
-  { label: '重点跟进', value: stats.value.focus, icon: 'Warning', color: '#f56c6c', bg: '#fef0f0' },
-  { label: '下单完成', value: stats.value.ordered, icon: 'CircleCheck', color: '#67c23a', bg: '#f0f9eb' }
+  { label: '客户总数', value: stats.value.total, icon: 'User', color: '#409eff', status: '', bg: '#ecf5ff' },
+  { label: '潜在客户', value: stats.value.potential, icon: 'Star', color: '#1e90ff', status: '潜在客户', bg: '#e8f4ff' },
+  { label: '重点跟进', value: stats.value.focus, icon: 'Warning', color: '#f56c6c', status: '重点跟进', bg: '#fef0f0' },
+  { label: '下单完成', value: stats.value.ordered, icon: 'CircleCheck', color: '#67c23a', status: '下单完成', bg: '#f0f9eb' }
 ])
+
+// 点击统计卡片：跳转客户页并带入对应状态筛选（写入 sessionStorage，ClientView 挂载时恢复）
+const goClientsWithStatus = (status) => {
+  sessionStorage.setItem('client-filters', JSON.stringify({ status: status || '', source: '', country: '', userCode: '' }))
+  router.push('/clients')
+}
 
 const countryTop = computed(() => {
   const map = {}
@@ -356,7 +372,7 @@ onMounted(() => {
 
 .stat-card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 12px);
   padding: 22px 16px 18px;
   text-align: center;
   border: 1px solid #eef0f4;
@@ -364,6 +380,12 @@ onMounted(() => {
   position: relative;
   overflow: hidden;
   animation: fadeSlideUp 0.5s ease both;
+  cursor: pointer;
+  outline: none;
+}
+
+.stat-card:focus-visible {
+  box-shadow: 0 0 0 2px var(--app-primary, #409eff);
 }
 
 .stat-card::before {
@@ -471,7 +493,7 @@ onMounted(() => {
 
 .dist-empty {
   text-align: center;
-  color: #c0c4cc;
+  color: var(--text-placeholder, #909399);
   padding: 36px 0;
   font-size: 14px;
 }
