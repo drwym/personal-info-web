@@ -8,6 +8,7 @@
     @update:model-value="$emit('update:visible', $event)"
   >
     <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px" label-position="right">
+      <div class="form-group-title form-group-first">基本信息</div>
       <el-form-item label="用户编码">
         <el-input v-model="form.userCode" :disabled="true" :placeholder="editingId === null ? '自动生成' : ''"></el-input>
       </el-form-item>
@@ -27,10 +28,6 @@
           <el-input v-model="form.countryCode" placeholder="区号" readonly style="width:110px;"></el-input>
         </div>
       </el-form-item>
-      <el-form-item label="跟进时间" prop="time" required>
-        <el-date-picker v-model="form.time" type="date" placeholder="选择日期"
-                        value-format="YYYY-MM-DD" style="width:100%;"></el-date-picker>
-      </el-form-item>
       <el-form-item label="公司" prop="company" required>
         <el-select
           v-model="form.company"
@@ -49,6 +46,12 @@
       <el-form-item label="联系方式">
         <el-input v-model="form.phone" placeholder="例如: 13800138000" maxlength="30"></el-input>
       </el-form-item>
+
+      <div class="form-group-title">跟进信息</div>
+      <el-form-item label="跟进时间" prop="time" required>
+        <el-date-picker v-model="form.time" type="date" placeholder="选择日期"
+                        value-format="YYYY-MM-DD" style="width:100%;"></el-date-picker>
+      </el-form-item>
       <el-form-item label="来源">
         <el-select v-model="form.source" placeholder="请选择来源" style="width:100%;" clearable>
           <el-option v-for="s in sourceList" :key="s" :label="s" :value="s"></el-option>
@@ -56,9 +59,9 @@
       </el-form-item>
       <el-form-item label="当前状态">
         <el-select v-model="form.status" placeholder="请选择状态" style="width:100%;">
-          <el-option label="☆潜在客户" value="潜在客户"></el-option>
-          <el-option label="☆重点跟进" value="重点跟进"></el-option>
-          <el-option label="☆下单完成" value="下单完成"></el-option>
+          <el-option label="潜在客户" value="潜在客户"></el-option>
+          <el-option label="重点跟进" value="重点跟进"></el-option>
+          <el-option label="下单完成" value="下单完成"></el-option>
         </el-select>
       </el-form-item>
       <el-form-item label="下单">
@@ -108,3 +111,15 @@ const handleSubmit = () => {
   })
 }
 </script>
+<style scoped>
+.form-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #909399;
+  line-height: 1.2;
+  margin: 4px 0 14px;
+  padding-left: 8px;
+  border-left: 3px solid var(--app-primary, #409eff);
+}
+.form-group-first { margin-top: 0; }
+</style>

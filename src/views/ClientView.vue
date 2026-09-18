@@ -1,11 +1,22 @@
 <template>
-  <div class="client-view" v-loading.fullscreen.lock="initialLoading" element-loading-text="正在从云端加载数据...">
+  <div class="client-view">
     <PageHeader
       title="客户信息表"
       :status-text="statusText"
       :status-tag-type="statusTagType"
     />
 
+    <!-- 首屏骨架屏 -->
+    <el-card v-if="initialLoading" class="filter-card" shadow="never">
+      <el-skeleton animated :rows="1" />
+    </el-card>
+    <el-card v-if="initialLoading" class="table-card" shadow="never" body-style="padding:0;">
+      <div style="padding:16px;">
+        <el-skeleton animated :rows="12" />
+      </div>
+    </el-card>
+
+    <template v-else>
     <FilterBar
       :current-filters="currentFilters"
       :source-list="sourceList"
@@ -40,6 +51,7 @@
       @import-data="importData"
       @add="openModal()"
     />
+    </template>
 
     <!-- 添加/编辑 弹窗 -->
     <EditDialog

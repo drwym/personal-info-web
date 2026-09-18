@@ -1,7 +1,71 @@
 <template>
   <el-card class="table-card" shadow="never" body-style="padding:0;">
     <div class="table-wrapper" ref="wrapperRef">
+      <!-- 移动端卡片列表 -->
+      <div v-if="isMobile" v-loading="loadingPage" class="mobile-card-list">
+        <div v-if="pageData.length === 0" class="mobile-card-empty">
+          <el-empty description="暂无客户数据">
+            <el-button type="primary" size="small" @click="$emit('add')">
+              <el-icon><Plus /></el-icon> 添加第一条数据
+            </el-button>
+          </el-empty>
+        </div>
+        <div v-for="(row, idx) in pageData" :key="row.id" class="client-card">
+          <div class="card-header">
+            <el-checkbox
+              :model-value="isSelected(row)"
+              aria-label="选择该客户"
+              @change="toggleSelect(row)"
+            />
+            <span class="card-index">{{ indexMethod(idx) }}</span>
+            <span class="card-code">{{ row.userCode || '-' }}</span>
+            <span class="card-country" :class="getCountryClass(row.status)">
+              {{ row.countryName || row.country }}
+              <span v-if="row.countryCode" class="country-code-sub">({{ row.countryCode }})</span>
+            </span>
+            <span v-if="row.ord" class="cell-ordered card-ordered">已下单</span>
+          </div>
+          <div class="card-body">
+            <div class="card-field">
+              <span class="card-label">公司</span>
+              <span class="card-value">{{ row.company || '-' }}</span>
+            </div>
+            <div class="card-field">
+              <span class="card-label">客户名</span>
+              <span class="card-value">{{ row.clientName || '-' }}</span>
+            </div>
+            <div class="card-field">
+              <span class="card-label">联系方式</span>
+              <span class="card-value">{{ row.phone || '-' }}</span>
+            </div>
+            <div class="card-field">
+              <span class="card-label">跟进时间</span>
+              <span class="card-value">{{ row.time || '-' }}</span>
+            </div>
+            <div class="card-field card-field-full">
+              <span class="card-label">来源</span>
+              <span class="card-value">
+                <el-tag v-if="row.source" size="small" effect="plain">{{ row.source }}</el-tag>
+                <span v-else class="cell-placeholder">-</span>
+              </span>
+            </div>
+          </div>
+          <div v-if="row.remarks" class="card-remark" @click="$emit('show-remark', row.remarks)">
+            <span class="card-label">备注</span>{{ row.remarks }}
+          </div>
+          <div class="card-footer">
+            <el-button link type="primary" size="small" @click="$emit('edit', row.id)">
+              <el-icon><Edit /></el-icon> 修改
+            </el-button>
+            <el-button link type="danger" size="small" @click="$emit('delete', row.id)">
+              <el-icon><Delete /></el-icon> 删除
+            </el-button>
+          </div>
+        </div>
+      </div>
+      <!-- 桌面端表格 -->
       <el-table
+        v-else
         ref="innerTable"
         class="cust-table"
         v-loading="loadingPage"
@@ -150,6 +214,22 @@ onBeforeUnmount(() => {
 
 const emit = defineEmits(['selection-change', 'show-remark', 'edit', 'delete', 'page-change', 'size-change', 'add'])
 
+// 移动端卡片模式多选：维护本地选中集合并同步 selection-change，行为与表格勾选一致
+const mobileSelected = ref([])
+const isSelected = (row) => mobileSelected.value.some(r => r.id === row.id)
+const toggleSelect = (row) => {
+  mobileSelected.value = isSelected(row)
+    ? mobileSelected.value.filter(r => r.id !== row.id)
+    : [...mobileSelected.value, row]
+  emit('selection-change', mobileSelected.value)
+}
+watch(() => props.pageData, () => {
+  if (mobileSelected.value.length) {
+    mobileSelected.value = []
+    emit('selection-change', mobileSelected.value)
+  }
+})
+
 const pagerLayout = computed(() => 'sizes, prev, pager, next')
 
 const indexMethod = (index) => {
@@ -179,6 +259,103 @@ const getCountryClass = (status) => {
 <style scoped>
 .cell-placeholder { color: var(--text-placeholder); }
 .cell-ordered { color: var(--status-done); }
+
+/* ========== 移动端卡片列表 ========== */
+.mobile-card-list {
+  min-height: 240px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mobile-card-empty { padding: 24px 0; }
+.client-card {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: var(--radius-md, 8px);
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #ebeef5;
+  flex-wrap: wrap;
+}
+.card-index {
+  font-size: 11px;
+  color: #909399;
+  flex-shrink: 0;
+}
+.card-code {
+  font-weight: 600;
+  font-size: 13px;
+  color: #303133;
+  flex-shrink: 0;
+}
+.card-country {
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-ordered {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.card-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  padding: 10px 0;
+}
+.card-field {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  min-width: 0;
+}
+.card-field-full { grid-column: 1 / -1; }
+.card-label {
+  color: #909399;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.card-value {
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-remark {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 8px 0 0;
+  border-top: 1px dashed #ebeef5;
+  font-size: 12px;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.card-remark:active { color: var(--app-primary, #409eff); }
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid #f0f2f5;
+}
+.card-footer .el-button { padding: 4px 6px; }
 
 @media (min-width: 769px) {
   .table-wrapper {

@@ -325,12 +325,9 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .el-dialog .el-dialog__footer { padding: 10px 14px 16px; }
   .el-dialog .el-button { min-height: 40px; }
 
-  /* 移动端底部 TabBar 留白 */
-  .home-page,
-  .holiday-calendar-wrapper,
-  .price-content,
-  .table-card {
-    margin-bottom: calc(var(--tabbar-height) + 8px) !important;
+  /* 移动端底部 TabBar 留白：统一在 #app 预留空间，避免各页面末尾内容（操作按钮等）被固定 TabBar 遮挡 */
+  #app {
+    padding-bottom: calc(var(--tabbar-height) + 8px);
   }
 
   /* 表格loading居中 */

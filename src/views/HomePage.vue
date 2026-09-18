@@ -6,7 +6,24 @@
       :status-tag-type="statusTagType"
     />
 
-    <div v-loading="loading" class="dashboard-content" element-loading-text="正在加载统计数据...">
+    <div class="dashboard-content">
+      <!-- 首屏骨架屏 -->
+      <div v-if="loading && !loadError" class="dash-skeleton">
+        <el-skeleton animated>
+          <template #template>
+            <el-skeleton-item variant="rect" style="width:100%;height:110px;border-radius:12px;" />
+            <div class="sk-row">
+              <el-skeleton-item v-for="n in 4" :key="n" variant="rect" style="height:120px;border-radius:12px;flex:1;min-width:150px;" />
+            </div>
+            <div class="sk-row">
+              <el-skeleton-item variant="rect" style="height:240px;border-radius:12px;flex:1;min-width:280px;" />
+              <el-skeleton-item variant="rect" style="height:240px;border-radius:12px;flex:1;min-width:280px;" />
+            </div>
+          </template>
+        </el-skeleton>
+      </div>
+
+      <template v-else>
       <!-- 加载失败重试 -->
       <el-alert v-if="loadError" :title="loadError" type="error" show-icon style="margin-bottom: 16px;">
         <template #default>
@@ -122,7 +139,8 @@
             </template>
           </el-table-column>
         </el-table>
-      </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -264,6 +282,15 @@ onMounted(() => {
 
 .dashboard-content {
   min-height: 60vh;
+}
+
+/* ========== 首屏骨架屏 ========== */
+.dash-skeleton { padding: 4px 0; }
+.sk-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 20px 0;
 }
 
 /* ========== 用户信息卡片 ========== */
