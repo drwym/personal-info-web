@@ -97,13 +97,20 @@
 import { ref, computed, watch, onMounted, reactive } from 'vue'
 import { ArrowLeft, ArrowRight, Loading } from '@element-plus/icons-vue'
 import { useHolidays } from '../composables/useHolidays'
+import { useAuth } from '../composables/useAuth'
+import { useClientCountries } from '../composables/useClientCountries'
 import { HOLIDAY_COUNTRY_CODES, isoToCn } from '../utils/countryCodeMap'
+
+// 客户信息表中无国家数据时的兜底默认国家
+const FALLBACK_COUNTRY_CODES = ['CN', 'US', 'JP', 'KR', 'GB', 'DE', 'FR']
 
 const now = new Date()
 const currentYear = ref(now.getFullYear())
 const currentMonth = ref(now.getMonth() + 1)
-const selectedCountries = ref(['CN', 'US', 'JP', 'KR', 'GB', 'DE', 'FR'])
+const selectedCountries = ref([])
 
+const { currentUser } = useAuth()
+const { fetchClientCountries } = useClientCountries()
 const { holidaysByDay, loading, error, fetchProgress, loadHolidays } = useHolidays()
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
@@ -218,7 +225,10 @@ watch([currentYear, currentMonth], ([y, m]) => {
   loadHolidays(y, m, selectedCountries.value)
 })
 
-onMounted(() => {
+onMounted(async () => {
+  // 默认国家取当前用户客户信息表中去重后的国家列表
+  const codes = await fetchClientCountries(currentUser.value?.id)
+  selectedCountries.value = codes.length > 0 ? codes : [...FALLBACK_COUNTRY_CODES]
   loadHolidays(currentYear.value, currentMonth.value, selectedCountries.value)
 })
 </script>
